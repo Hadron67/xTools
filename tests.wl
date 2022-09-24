@@ -1,0 +1,1 @@
+Print[TestReport["xtension.wlt"]@"AllTestsSucceeded"]
