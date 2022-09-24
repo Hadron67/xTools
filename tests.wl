@@ -1,1 +1,1 @@
-Print[TestReport["xtension.wlt"]@"AllTestsSucceeded"]
+Print[TestReport["xTension.wlt"]@"AllTestsSucceeded"]

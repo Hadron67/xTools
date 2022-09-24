@@ -1,4 +1,4 @@
-<< xtension`;
+<< xTension`;
 
 MUnit`BeginTestSection["FG expansion"];
 
@@ -28,3 +28,12 @@ einsteinEomExpected = {{(metricMX[MX`b$16537$16669, MX`b$16538$16669]*(metricMX[
 VerificationTest[einsteinEom - einsteinEomExpected // ContractMetric[#, metricMX] & // SimplificationN, {{0, 0}, {0, 0}}];
 
 MUnit`EndTestSection[];
+
+MUnit`BeginTestSection["ReplaceIndicesRules"];
+
+DefManifold[M4, 4, {M4`a, M4`b, M4`c, M4`d, M4`e, M4`f}];
+DefMetric[1, metricM4[-M4`a, -M4`b], CDM4, PrintAs -> "g"];
+
+VerificationTest[ReplaceIndicesRules[RicciCDMF[-MF`A, -MF`B], TangentMF, TangentM4], {MF`A -> M4`a, MF`B -> M4`b}];
+
+MUint`EndTestSection[];

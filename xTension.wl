@@ -71,15 +71,15 @@ Protect@MakeDecomposedRules;
 SetDecomposedRules[tensor_[inds__], vals_] := (#1 := #2) & @@@ MakeDecomposedRules[tensor[inds],vals];
 Protect@SetDecomposedRules;
 
-BasisOfCoordinateParameter[_]:=Null;
-DualBasisOfCoordinateParameter[_]:=Null;
-CoordinateParameterOfVBundle[_]:=Null;
-VBundleOfCoordinateParameter[_]:=Null;
-CoordinateBasisQ[_]:=False;
+BasisOfCoordinateParameter[_] := Null;
+DualBasisOfCoordinateParameter[_] := Null;
+CoordinateParameterOfVBundle[_] := Null;
+VBundleOfCoordinateParameter[_] := Null;
+CoordinateBasisQ[_] := False;
 Protect[BasisOfCoordinateParameter, DualBasisOfCoordinateParameter, CoordinateParameterOfVBundle, VBundleOfCoordinateParameter, CoordinateBasisQ];
 
 DefCoordinateParameter::nsvb="`1` is not a subvbundle of `2`";
-DefCoordinateParameter[parentVB_?VBundleQ -> vb_?VBundleQ, param_?ParameterQ, e_, ed_]:=Module[
+DefCoordinateParameter[parentVB_?VBundleQ -> vb_?VBundleQ, param_?ParameterQ, e_, ed_] := Module[
     {a, b, c, otherVB},
     If[parentVB == vb || !SubvbundleQ[parentVB, vb], Throw[Message[DefCoordinateParameter::nsvb, vb, parentVB]]];
 
@@ -135,7 +135,7 @@ Protect@DecomposedIndicesList;
 ScalarTraceProductDummy[expr_] := expr /. Scalar[e_] :> Scalar@TraceProductDummy@e;
 Protect@ScalarTraceProductDummy;
 SplitAllIndices[l_List, vb_] := SplitAllIndices[#, vb] & /@ l;
-SplitAllIndices[expr_, vb_] := expr // SplitIndex[#, DecomposedIndicesList[FindFreeIndices@Evaluate@#, vb]] & // ScalarTraceProductDummy // TraceProductDummy;
+SplitAllIndices[expr_, vb_] := expr // SplitIndex[#, DecomposedIndicesList[FindFreeIndices@#, vb]] & // ScalarTraceProductDummy // TraceProductDummy;
 SplitAllIndices[vb_][expr_] := SplitAllIndices[expr, vb];
 Protect@SplitAllIndices;
 
@@ -149,7 +149,7 @@ CalculateDecomposed[expr_, vb_, calc_, calc2_] := Module[
     indsMap = DecomposedIndicesList[freeInds, vb];
     vals = expr // calc // SplitIndex[#, indsMap] & // TraceProductDummy // Flatten // calc2 // SimplificationN;
     lhs = expr // SplitIndex[#, indsMap] & // Flatten;
-    Flatten[MakeRule[Evaluate@#, MetricOn -> None] & /@ Transpose@{lhs, vals}]
+    Flatten[MakeRule[#, MetricOn -> None] & /@ Transpose@{lhs, vals}]
 ];
 Protect@CalculateDecomposed;
 
@@ -269,7 +269,7 @@ ToDecomposed[expr_, cd_] := Module[
     expr // SeparateMetric[metric]
         // ChangeCovD[#, cd, PD] &
         // ReplaceDummies
-        // SplitIndex[#, DecomposedIndicesList[FindFreeIndices@Evaluate@#, VBundleOfMetric@metric]] &
+        // SplitIndex[#, DecomposedIndicesList[FindFreeIndices@#, VBundleOfMetric@metric]] &
         // ScalarTraceProductDummy
         // TraceProductDummy
         // ReplaceAll@AllDecomposedRules[cd]
@@ -286,7 +286,7 @@ ReplaceIndicesRules[expr_, fromVB_, toVB_, opt: OptionsPattern[]] := Module[
     notFoundInds = DeleteCases[#1 & @@@ extraRules, Alternatives @@ inds];
     If[Length@notFoundInds > 0, Message[ReplaceIndicesRules::nsi, notFoundInds]];
     inds = DeleteCases[inds, Alternatives @@ (#1 & @@@ extraRules)];
-    Join[extraRules, #1 -> #2 & @@@ Transpose@{inds, GetIndicesOfVBundle[toVB, Length@inds, #2 & @@@ extraRules]}]
+    Join[extraRules, Thread[inds -> GetIndicesOfVBundle[toVB, Length@inds, #2 & @@@ extraRules]]]
 ];
 Protect@ReplaceIndicesRules;
 
