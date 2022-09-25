@@ -45,6 +45,10 @@ ReplaceIndicesRules::usage = "ReplaceIndicesRules[expr, fromVB, toVB, opt] retur
 
 ReplaceCovDs::usage = "ReplaceCovDs[expr, cdFrom, cdTo, opt] replaces all indices and associated tensors (curvatures, etc) of cdFrom in expr with that of cdTo.";
 
+DefRiemannVarD::usage = "DefRiemannVarD[cd] defines rules that makes VarD[Riemann[cd]][expr] works for expr containing Ricci tensors.";
+
+UndefRiemannVarD::usage = "UndefRiemannVarD[cd] removes rules defined by DefRiemannVarD[cd]";
+
 OtherRules::usage = "OtherRules is an option for ReplaceIndicesRules and ReplaceCovDs that defines other rules to be applied.";
 
 Protect[OtherRules];
@@ -86,7 +90,7 @@ DefCoordinateParameter[parentVB_?VBundleQ -> vb_?VBundleQ, param_?ParameterQ, e_
     {a} = GetIndicesOfVBundle[vb, 1];
     otherVB = DeleteCases[List @@ First@SplittingsOfVBundle@parentVB, vb];
     DefTensor[e[a], BaseOfVBundle@vb, PrintAs -> "(\!\(\*SubscriptBox[\(\[PartialD]\), \(" <> PrintAs[param] <> "\)]\))"];
-    DefTensor[ed[-a], BaseOfVBundle@vb, PrintAs->"(d" <> PrintAs[param] <> ")"];
+    DefTensor[ed[-a], BaseOfVBundle@vb, PrintAs -> "(d" <> PrintAs[param] <> ")"];
     e /: e[b_Symbol] ed[-b_Symbol] := 1;
     CoordinateBasisQ[e] ^= True;
     CoordinateBasisQ[ed] ^= True;
@@ -224,8 +228,7 @@ CalculateDecomposedRicciScalar[cd_, ricciRules_] := Module[
         {tmp = ATensor["tmp", -{vb, vb}]},
         tmp[-a, -b] metric[a, b] // TraceProductDummy // ReplaceAll[tmp -> Ricci[cd]] // ReplaceAll[ricciRules] // NoScalar // SimplificationN
     ];
-    MakeRule[{Evaluate[RicciScalar[cd][]], Evaluate@Scalar@ret}, 
-    MetricOn -> None]
+    MakeRule[{Evaluate[RicciScalar[cd][]], Evaluate@Scalar@ret}, MetricOn -> None]
 ];
 Protect@CalculateDecomposedRicciScalar;
 
@@ -307,6 +310,36 @@ ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] :=
     RicciScalar[cdFrom] -> RicciScalar[cdTo]
 };
 Protect@ReplaceCovDs;
+
+DefRiemannVarD[cd_] := With[{
+    RiemannCD = Riemann@cd,
+    RicciCD = Ricci@cd,
+    RicciScalarCD = RicciScalar@cd
+}, Module[
+    {i, j},
+    {i, j} = GetIndicesOfVBundle[First@VBundlesOfCovD@cd, 2];
+    RiemannCD /: ImplicitTensorDepQ[RicciCD, RiemannCD] := True;
+    RiemannCD /: ImplicitTensorDepQ[RicciScalarCD, RiemannCD] := True;
+    (RicciCD /: VarD[RiemannCD[inds__], cd2_][RicciCD[a_, b_], rest_] := Module[
+        {#1, #2},
+        VarD[RiemannCD[inds], cd2][RiemannCD[a, #1, b, #2], rest #3[-#1, -#2]]
+    ]) & @@ {i, j, MetricOfCovD@cd};
+    (RicciScalarCD /: VarD[RiemannCD[inds__], cd2_][RicciScalarCD[], rest_] := Module[
+        {#1, #2},
+        VarD[RiemannCD[inds], cd2][RicciCD[#1, #2], rest #3[-#1, -#2]]
+    ]) & @@ {i, j, MetricOfCovD@cd};
+]];
+UndefRiemannVarD[cd_] := With[{
+    RiemannCD = Riemann@cd,
+    RicciCD = Ricci@cd,
+    RicciScalarCD = RicciScalar@cd
+},
+    RiemannCD /: ImplicitTensorDepQ[RicciCD, RiemannCD] =.;
+    RiemannCD /: ImplicitTensorDepQ[RicciScalarCD, RiemannCD] =.;
+    RicciCD /: VarD[RiemannCD[inds__], cd2_][RicciCD[a_, b_], rest_] =.;
+    RicciScalarCD /: VarD[RiemannCD[inds__], cd2_][RicciScalarCD[], rest_] =.;
+];
+Protect[DefRiemannVarD, UndefRiemannVarD];
 
 End[];
 

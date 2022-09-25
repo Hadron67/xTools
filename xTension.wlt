@@ -36,4 +36,25 @@ DefMetric[1, metricM4[-M4`a, -M4`b], CDM4, PrintAs -> "g"];
 
 VerificationTest[ReplaceIndicesRules[RicciCDMF[-MF`A, -MF`B], TangentMF, TangentM4], {MF`A -> M4`a, MF`B -> M4`b}];
 
-MUint`EndTestSection[];
+MUnit`EndTestSection[];
+
+MUnit`BeginTestSection["DefRiemannVarD"];
+
+DefRiemannVarD[CDMF];
+VerificationTest[
+    VarD[RiemannCDMF[-MF`A, -MF`B, -MF`C, -MF`D]][Scalar[RicciCDMF[MF`A, MF`B] RicciCDMF[-MF`A, -MF`B]]]
+    - 1/2 (
+        metricMF[MF`B, MF`D] RicciCDMF[MF`A, MF`C]
+        - metricMF[MF`B, MF`C] RicciCDMF[MF`A, MF`D]
+        - metricMF[MF`A, MF`D] RicciCDMF[MF`B, MF`C]
+        + metricMF[MF`A, MF`C] RicciCDMF[MF`B, MF`D]
+    ) // ContractMetric // Simplification,
+    0
+];
+VerificationTest[
+    VarD[RiemannCDMF[-MF`A, -MF`B, -MF`C, -MF`D]][RicciScalarCDMF[]]
+    - 1/2 (- metricMF[MF`A, MF`D] metricMF[MF`B, MF`C] + metricMF[MF`A, MF`C] metricMF[MF`B, MF`D]) // ContractMetric // Simplification,
+    0
+];
+
+MUnit`EndTestSection[];
