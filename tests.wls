@@ -1,0 +1,1 @@
+Print[TestReport["xTension.wlt"]@"AllTestsSucceeded"]

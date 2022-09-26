@@ -45,9 +45,11 @@ ReplaceIndicesRules::usage = "ReplaceIndicesRules[expr, fromVB, toVB, opt] retur
 
 ReplaceCovDs::usage = "ReplaceCovDs[expr, cdFrom, cdTo, opt] replaces all indices and associated tensors (curvatures, etc) of cdFrom in expr with that of cdTo.";
 
-DefRiemannVarD::usage = "DefRiemannVarD[cd] defines rules that makes VarD[Riemann[cd]][expr] works for expr containing Ricci tensors.";
+DefRiemannVarD::usage = "DefRiemannVarD[cd] defines rules that makes VarD[Riemann[cd]][expr] work for expr containing Ricci tensors.";
 
 UndefRiemannVarD::usage = "UndefRiemannVarD[cd] removes rules defined by DefRiemannVarD[cd]";
+
+BHTemperature::usage = "BHTemperature[gtt, grr, gxx, r, r0] calculates the Hawking temperature of black hole with radial coordinate r and metric components gtt, grr, gxx, and horizon r0.";
 
 OtherRules::usage = "OtherRules is an option for ReplaceIndicesRules and ReplaceCovDs that defines other rules to be applied.";
 
@@ -70,9 +72,11 @@ MakeDecomposedRules[tensor_[inds__], vals_] := Module[
     ret = HoldPattern[#1] :> #2 & @@@ Transpose@{tensor2 @@@ patList, Flatten @ vals};
     ret /. tensor2 -> tensor
 ];
+SyntaxInformation[MakeDecomposedRules] = {"ArgumentsPattern" -> {_, _}};
 Protect@MakeDecomposedRules;
 
 SetDecomposedRules[tensor_[inds__], vals_] := (#1 := #2) & @@@ MakeDecomposedRules[tensor[inds],vals];
+SyntaxInformation[SetDecomposedRules] = {"ArgumentsPattern" -> {_, _}};
 Protect@SetDecomposedRules;
 
 BasisOfCoordinateParameter[_] := Null;
@@ -80,6 +84,11 @@ DualBasisOfCoordinateParameter[_] := Null;
 CoordinateParameterOfVBundle[_] := Null;
 VBundleOfCoordinateParameter[_] := Null;
 CoordinateBasisQ[_] := False;
+SyntaxInformation[BasisOfCoordinateParameter] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[DualBasisOfCoordinateParameter] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[CoordinateParameterOfVBundle] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[VBundleOfCoordinateParameter] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[CoordinateBasisQ] = {"ArgumentsPattern" -> {_}};
 Protect[BasisOfCoordinateParameter, DualBasisOfCoordinateParameter, CoordinateParameterOfVBundle, VBundleOfCoordinateParameter, CoordinateBasisQ];
 
 DefCoordinateParameter::nsvb="`1` is not a subvbundle of `2`";
@@ -113,21 +122,23 @@ DefCoordinateParameter[parentVB_?VBundleQ -> vb_?VBundleQ, param_?ParameterQ, e_
     BasisOfCoordinateParameter[param] ^= e;
     DualBasisOfCoordinateParameter[param] ^= ed;
 ];
-Protect@DefCoordinateParameter;
-
+SyntaxInformation[DefCoordinateParameter] = {"ArgumentsPattern" -> {_, _, _, _}};
 DropCoordinateBasis[expr_] := expr /. _?CoordinateBasisQ[_] -> 1;
+SyntaxInformation[DropCoordinateBasis] = {"ArgumentsPattern" -> {_}};
+Protect[DefCoordinateParameter, DropCoordinateBasis];
+
 CoordinateParameterQ[p_] := BasisOfCoordinateParameter[p] =!= Null;
 CoordinateParameterOfIndex[i_] := CoordinateParameterOfVBundle@VBundleOfIndex@UpIndex@i;
 CoordinateIndexQ[i_] := AIndexQ[i] && CoordinateParameterOfIndex@i =!= Null;
-Protect[DropCoordinateBasis, CoordinateParameterQ, CoordinateParameterOfIndex, CoordinateIndexQ];
+Protect[CoordinateParameterQ, CoordinateParameterOfIndex, CoordinateIndexQ];
 
-Unprotect@{PD,ParamD};
+Unprotect[PD, ParamD];
 PD[-a_Symbol?CoordinateIndexQ][A_] := With[
     {param = CoordinateParameterOfIndex[a]},
     ParamD[param][A] DualBasisOfCoordinateParameter[param][-a]
 ];
 ParamD[p_Symbol?CoordinateParameterQ]@PD[-a_Symbol]@A_ := PD[-a]@ParamD[p]@A;
-Protect@{PD,ParamD};
+Protect[PD, ParamD];
 
 DecomposedIndicesList[ids_, vb_] := Module[
     {l, sp},
@@ -141,6 +152,7 @@ Protect@ScalarTraceProductDummy;
 SplitAllIndices[l_List, vb_] := SplitAllIndices[#, vb] & /@ l;
 SplitAllIndices[expr_, vb_] := expr // SplitIndex[#, DecomposedIndicesList[FindFreeIndices@#, vb]] & // ScalarTraceProductDummy // TraceProductDummy;
 SplitAllIndices[vb_][expr_] := SplitAllIndices[expr, vb];
+SyntaxInformation[SplitAllIndices] = {"ArgumentsPattern" -> {_, _.}};
 Protect@SplitAllIndices;
 
 ToCanonicalN[expr_, opt___] := ToCanonical[expr, UseMetricOnVBundle -> None, opt];
@@ -149,7 +161,7 @@ Protect[ToCanonicalN, SimplificationN];
 
 CalculateDecomposed[expr_, vb_, calc_, calc2_] := Module[
     {freeInds, indsMap, vals, lhs},
-    freeInds = FindFreeIndices@Evaluate@expr;
+    freeInds = FindFreeIndices@expr;
     indsMap = DecomposedIndicesList[freeInds, vb];
     vals = expr // calc // SplitIndex[#, indsMap] & // TraceProductDummy // Flatten // calc2 // SimplificationN;
     lhs = expr // SplitIndex[#, indsMap] & // Flatten;
@@ -172,6 +184,7 @@ CalculateDecomposedChristoffel[cd_] := Module[
         vals |-> Fold[ChangeCovD[#1, PD, #2] &, vals, cds]
     ]
 ];
+SyntaxInformation[CalculateDecomposedChristoffel] = {"ArgumentsPattern" -> {_}};
 Protect[SelectNonFlatCD, CalculateDecomposedChristoffel];
 
 ChristoffelToRiemann[expr_, cd_] := Module[
@@ -207,6 +220,7 @@ CalculateDecomposedRiemann[cd_, chrisRules_] := Module[
         ]
     ]
 ];
+SyntaxInformation[CalculateDecomposedRiemann] = {"ArgumentsPattern" -> {_, _}};
 Protect@CalculateDecomposedRiemann;
 
 CalculateDecomposedRicci[cd_, riemannRules_] := Module[
@@ -217,6 +231,7 @@ CalculateDecomposedRicci[cd_, riemannRules_] := Module[
     {a, b, c, d} = GetIndicesOfVBundle[VBundleOfMetric@metric, 4];
     CalculateDecomposed[ricci[-a, -b], VBundleOfMetric@metric, riemann[-a, -c, -b, -d] metric[c, d] &, e |-> e /. riemannRules]
 ];
+SyntaxInformation[CalculateDecomposedRicci] = {"ArgumentsPattern" -> {_, _}};
 Protect@CalculateDecomposedRicci;
 
 CalculateDecomposedRicciScalar[cd_, ricciRules_] := Module[
@@ -230,6 +245,7 @@ CalculateDecomposedRicciScalar[cd_, ricciRules_] := Module[
     ];
     MakeRule[{Evaluate[RicciScalar[cd][]], Evaluate@Scalar@ret}, MetricOn -> None]
 ];
+SyntaxInformation[CalculateDecomposedRicciScalar] = {"ArgumentsPattern" -> {_, _}};
 Protect@CalculateDecomposedRicciScalar;
 
 DecomposedChristoffelRulesOf[_] := Null;
@@ -246,6 +262,10 @@ DecomposedChristoffelRules[cd_] := Lazy[CalculateDecomposedChristoffel[cd], Deco
 DecomposedRiemannRules[cd_] := Lazy[CalculateDecomposedRiemann[cd, DecomposedChristoffelRules[cd]], DecomposedRiemannRulesOf[cd]];
 DecomposedRicciRules[cd_] := Lazy[CalculateDecomposedRicci[cd, DecomposedRiemannRules[cd]], DecomposedRicciRulesOf[cd]];
 DecomposedRicciScalarRule[cd_] := Lazy[CalculateDecomposedRicciScalar[cd, DecomposedRicciRules[cd]], DecomposedRicciScalarRuleOf[cd]];
+SyntaxInformation[DecomposedChristoffelRules] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[DecomposedRiemannRules] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[DecomposedRicciRules] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[DecomposedRicciScalarRule] = {"ArgumentsPattern" -> {_}};
 Protect[DecomposedChristoffelRules, DecomposedRiemannRules, DecomposedRicciRules, DecomposedRicciScalarRule];
 AllDecomposedRules[cd_] := Flatten@{
     DecomposedChristoffelRules[cd],
@@ -259,9 +279,10 @@ ClearDecomposedCache[cd_] := (
     cd /: DecomposedRicciRulesOf[cd] =.;
     cd /: DecomposedRicciScalarRuleOf[cd] =.;
 );
+SyntaxInformation[AllDecomposedRules] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[ClearDecomposedCache] = {"ArgumentsPattern" -> {_}};
 Protect[AllDecomposedRules, ClearDecomposedCache];
 
-ScalarTraceProductDummy[expr_] := expr /. Scalar[e_] :> Scalar@TraceProductDummy@e;
 ToDecomposed[cd_][expr_] := ToDecomposed[expr, cd];
 ToDecomposed[expr_List, cd_] := ToDecomposed[#, cd] & /@ expr;
 ToDecomposed[expr_, cd_] := Module[
@@ -278,7 +299,8 @@ ToDecomposed[expr_, cd_] := Module[
         // ReplaceAll@AllDecomposedRules[cd]
         // Fold[ChangeCovD[#1, PD, #2] &, #, cds] &
 ];
-Protect[ScalarTraceProductDummy, ToDecomposed];
+SyntaxInformation[ToDecomposed] = {"ArgumentsPattern" -> {_, _.}};
+Protect@ToDecomposed;
 
 Options[ReplaceIndicesRules] = {OtherRules -> {}};
 ReplaceIndicesRules::nsi = "index(ices) `1` not found in expression";
@@ -291,11 +313,11 @@ ReplaceIndicesRules[expr_, fromVB_, toVB_, opt: OptionsPattern[]] := Module[
     inds = DeleteCases[inds, Alternatives @@ (#1 & @@@ extraRules)];
     Join[extraRules, Thread[inds -> GetIndicesOfVBundle[toVB, Length@inds, #2 & @@@ extraRules]]]
 ];
+SyntaxInformation[ReplaceIndicesRules] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
 Protect@ReplaceIndicesRules;
 
 Options[ReplaceCovDs] = {OtherRules -> {}};
-ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] := 
-  expr /. Flatten@{
+ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] := expr /. Flatten@{
     Select[OptionValue[OtherRules], ! AIndexQ[#[[1]]] &],
     ReplaceIndicesRules[
         expr,
@@ -309,6 +331,7 @@ ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] :=
     Ricci[cdFrom] -> Ricci[cdTo],
     RicciScalar[cdFrom] -> RicciScalar[cdTo]
 };
+SyntaxInformation[ReplaceCovDs] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
 Protect@ReplaceCovDs;
 
 DefRiemannVarD[cd_] := With[{
@@ -329,6 +352,7 @@ DefRiemannVarD[cd_] := With[{
         VarD[RiemannCD[inds], cd2][RicciCD[#1, #2], rest #3[-#1, -#2]]
     ]) & @@ {i, j, MetricOfCovD@cd};
 ]];
+SyntaxInformation[DefRiemannVarD] = {"ArgumentsPattern" -> {_}};
 UndefRiemannVarD[cd_] := With[{
     RiemannCD = Riemann@cd,
     RicciCD = Ricci@cd,
@@ -339,7 +363,12 @@ UndefRiemannVarD[cd_] := With[{
     RicciCD /: VarD[RiemannCD[inds__], cd2_][RicciCD[a_, b_], rest_] =.;
     RicciScalarCD /: VarD[RiemannCD[inds__], cd2_][RicciScalarCD[], rest_] =.;
 ];
+SyntaxInformation[UndefRiemannVarD] = {"ArgumentsPattern" -> {_}};
 Protect[DefRiemannVarD, UndefRiemannVarD];
+
+BHTemperature[gtt_, grr_, gxx_, r_, r0_] := With[{fp = D[gtt/gxx, r], hp = D[1/grr, r]}, 1/(4 Pi) Sqrt[gxx fp hp] // Simplify // ReplaceAll[r -> r0]];
+SyntaxInformation[BHTemperature] = {"ArgumentsPattern" -> {_, _, _, _, _}};
+Protect@BHTemperature;
 
 End[];
 
