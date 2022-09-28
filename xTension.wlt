@@ -1,4 +1,5 @@
 << xTension`;
+$DefInfoQ = False;
 
 MUnit`BeginTestSection["FG expansion"];
 

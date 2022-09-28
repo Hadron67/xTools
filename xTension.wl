@@ -79,11 +79,11 @@ SetDecomposedRules[tensor_[inds__], vals_] := (#1 := #2) & @@@ MakeDecomposedRul
 SyntaxInformation[SetDecomposedRules] = {"ArgumentsPattern" -> {_, _}};
 Protect@SetDecomposedRules;
 
-BasisOfCoordinateParameter[_] := Null;
-DualBasisOfCoordinateParameter[_] := Null;
-CoordinateParameterOfVBundle[_] := Null;
-VBundleOfCoordinateParameter[_] := Null;
-CoordinateBasisQ[_] := False;
+BasisOfCoordinateParameter[_] = Null;
+DualBasisOfCoordinateParameter[_] = Null;
+CoordinateParameterOfVBundle[_] = Null;
+VBundleOfCoordinateParameter[_] = Null;
+CoordinateBasisQ[_] = False;
 SyntaxInformation[BasisOfCoordinateParameter] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[DualBasisOfCoordinateParameter] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[CoordinateParameterOfVBundle] = {"ArgumentsPattern" -> {_}};
@@ -100,21 +100,21 @@ DefCoordinateParameter[parentVB_?VBundleQ -> vb_?VBundleQ, param_?ParameterQ, e_
     otherVB = DeleteCases[List @@ First@SplittingsOfVBundle@parentVB, vb];
     DefTensor[e[a], BaseOfVBundle@vb, PrintAs -> "(\!\(\*SubscriptBox[\(\[PartialD]\), \(" <> PrintAs[param] <> "\)]\))"];
     DefTensor[ed[-a], BaseOfVBundle@vb, PrintAs -> "(d" <> PrintAs[param] <> ")"];
-    e /: e[b_Symbol] ed[-b_Symbol] := 1;
+    e /: e[b_Symbol] ed[-b_Symbol] = 1;
     CoordinateBasisQ[e] ^= True;
     CoordinateBasisQ[ed] ^= True;
 
     With[
         {pmQ = Symbol[ToString[#] <> "`pmQ"]},
-        param /: PD[_?pmQ]@param:=0;
-        e /: PD[_?pmQ]@e[_Symbol]:=0;
-        ed /: PD[_?pmQ]@ed[-_Symbol]:=0;
+        param /: PD[_?pmQ]@param = 0;
+        e /: PD[_?pmQ]@e[_Symbol] = 0;
+        ed /: PD[_?pmQ]@ed[-_Symbol] = 0;
     ] & /@ otherVB;
     With[
         {cd = CovDOfMetric@#, pmQ = Symbol[ToString[VBundleOfMetric@#] <> "`pmQ"]},
-        param /: cd[_?pmQ]@param := 0;
-        e /: cd[_?pmQ]@e[_Symbol] := 0;
-        ed /: cd[_?pmQ]@ed[-_Symbol] := 0;
+        param /: cd[_?pmQ]@param = 0;
+        e /: cd[_?pmQ]@e[_Symbol] = 0;
+        ed /: cd[_?pmQ]@ed[-_Symbol] = 0;
     ] & /@ Select[Union @@ MetricsOfVBundle /@ otherVB, CovDOfMetric[#] =!= PD &];
 
     CoordinateParameterOfVBundle[vb] ^= param;
@@ -248,10 +248,10 @@ CalculateDecomposedRicciScalar[cd_, ricciRules_] := Module[
 SyntaxInformation[CalculateDecomposedRicciScalar] = {"ArgumentsPattern" -> {_, _}};
 Protect@CalculateDecomposedRicciScalar;
 
-DecomposedChristoffelRulesOf[_] := Null;
-DecomposedRiemannRulesOf[_] := Null;
-DecomposedRicciRulesOf[_] := Null;
-DecomposedRicciScalarRuleOf[_] := Null;
+DecomposedRiemannRulesOf[_] = Null;
+DecomposedRicciRulesOf[_] = Null;
+DecomposedRicciScalarRuleOf[_] = Null;
+DecomposedChristoffelRulesOf[_] = Null;
 Protect[DecomposedChristoffelRulesOf, DecomposedRiemannRulesOf, DecomposedRicciRulesOf, DecomposedRicciScalarRuleOf];
 
 Lazy[expr_, cache_] := If[cache === Null, cache ^= expr, cache];
@@ -317,20 +317,27 @@ SyntaxInformation[ReplaceIndicesRules] = {"ArgumentsPattern" -> {_, _, _, Option
 Protect@ReplaceIndicesRules;
 
 Options[ReplaceCovDs] = {OtherRules -> {}};
-ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] := expr /. Flatten@{
-    Select[OptionValue[OtherRules], ! AIndexQ[#[[1]]] &],
-    ReplaceIndicesRules[
-        expr,
-        First@VBundlesOfCovD@cdFrom,
-        First@VBundlesOfCovD@cdTo,
-        OtherRules -> Select[OptionValue[OtherRules], AIndexQ[#[[1]]] &]
-    ],
-    cdFrom -> cdTo,
-    MetricOfCovD[cdFrom] -> MetricOfCovD[cdTo],
-    Riemann[cdFrom] -> Riemann[cdTo],
-    Ricci[cdFrom] -> Ricci[cdTo],
-    RicciScalar[cdFrom] -> RicciScalar[cdTo]
-};
+ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] := With[{
+    gFrom = MetricOfCovD@cdFrom,
+    gTo = MetricOfCovD@cdTo,
+    indRules = Select[OptionValue[OtherRules], ! AIndexQ[#[[1]]] &],
+    otherRules = Select[OptionValue[OtherRules], AIndexQ[#[[1]]] &]
+},
+    expr /. Flatten@{
+        indRules,
+        ReplaceIndicesRules[
+            expr,
+            First@VBundlesOfCovD@cdFrom,
+            First@VBundlesOfCovD@cdTo,
+            OtherRules -> otherRules
+        ],
+        cdFrom -> cdTo,
+        gFrom -> gTo,
+        Riemann[cdFrom] -> Riemann[cdTo],
+        Ricci[cdFrom] -> Ricci[cdTo],
+        RicciScalar[cdFrom] -> RicciScalar[cdTo]
+    } //. gFrom -> gTo (* some metrics may be left over if cdTo is an xCoba connection *)
+];
 SyntaxInformation[ReplaceCovDs] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
 Protect@ReplaceCovDs;
 
@@ -341,8 +348,8 @@ DefRiemannVarD[cd_] := With[{
 }, Module[
     {i, j},
     {i, j} = GetIndicesOfVBundle[First@VBundlesOfCovD@cd, 2];
-    RiemannCD /: ImplicitTensorDepQ[RicciCD, RiemannCD] := True;
-    RiemannCD /: ImplicitTensorDepQ[RicciScalarCD, RiemannCD] := True;
+    RiemannCD /: ImplicitTensorDepQ[RicciCD, RiemannCD] = True;
+    RiemannCD /: ImplicitTensorDepQ[RicciScalarCD, RiemannCD] = True;
     (RicciCD /: VarD[RiemannCD[inds__], cd2_][RicciCD[a_, b_], rest_] := Module[
         {#1, #2},
         VarD[RiemannCD[inds], cd2][RiemannCD[a, #1, b, #2], rest #3[-#1, -#2]]
