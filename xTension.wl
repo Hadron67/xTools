@@ -1,4 +1,4 @@
-BeginPackage["xTools`xTension`", {"xAct`xTensor`"}];
+BeginPackage["xTools`xTension`", {"xAct`xCore`", "xAct`xTensor`"}];
 
 ToCanonicalN::usage = "Calls ToCanonical with UseMetricOnVBundle -> None.";
 SimplificationN::usage = "Calls Simplification[] using Implode.";
@@ -49,11 +49,19 @@ DefRiemannVarD::usage = "DefRiemannVarD[cd] defines rules that makes VarD[Rieman
 
 UndefRiemannVarD::usage = "UndefRiemannVarD[cd] removes rules defined by DefRiemannVarD[cd]";
 
+SetCMetricRule::usage = "SetCMetricRule[metric, cmetric] defines component rules for metric using CTensor metric cmetric.";
+
+UnsetCMetricRule::usage = "UnsetCMetricRule[metric] removes all rules defined by SetCMetricRule[metric, ...].";
+
+WithCMetricRule::usage = "WithCMetricRule[expr_, metric_, cmetric_] evaluates expr by calling SetCMetricRule[metric, cmetric] first. It's also an option for ReplaceCovDs determining whether wrap the whole expression with WithCMetricRule or not.";
+
 BHTemperature::usage = "BHTemperature[gtt, grr, gxx, r, r0] calculates the Hawking temperature of black hole with radial coordinate r and metric components gtt, grr, gxx, and horizon r0.";
 
 OtherRules::usage = "OtherRules is an option for ReplaceIndicesRules and ReplaceCovDs that defines other rules to be applied.";
 
-Protect[OtherRules];
+MetricInv::usage = "MetricInv is an option for SetCMetricRule that specifies the inverse metric explicitly.";
+
+Protect[OtherRules, MetricInv];
 
 Begin["`Private`"];
 
@@ -75,7 +83,7 @@ MakeDecomposedRules[tensor_[inds__], vals_] := Module[
 SyntaxInformation[MakeDecomposedRules] = {"ArgumentsPattern" -> {_, _}};
 Protect@MakeDecomposedRules;
 
-SetDecomposedRules[tensor_[inds__], vals_] := (#1 := #2) & @@@ MakeDecomposedRules[tensor[inds],vals];
+SetDecomposedRules[tensor_[inds__], vals_] := (#1 := #2) & @@@ MakeDecomposedRules[tensor[inds], vals];
 SyntaxInformation[SetDecomposedRules] = {"ArgumentsPattern" -> {_, _}};
 Protect@SetDecomposedRules;
 
@@ -91,7 +99,7 @@ SyntaxInformation[VBundleOfCoordinateParameter] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[CoordinateBasisQ] = {"ArgumentsPattern" -> {_}};
 Protect[BasisOfCoordinateParameter, DualBasisOfCoordinateParameter, CoordinateParameterOfVBundle, VBundleOfCoordinateParameter, CoordinateBasisQ];
 
-DefCoordinateParameter::nsvb="`1` is not a subvbundle of `2`";
+DefCoordinateParameter::nsvb = "`1` is not a subvbundle of `2`";
 DefCoordinateParameter[parentVB_?VBundleQ -> vb_?VBundleQ, param_?ParameterQ, e_, ed_] := Module[
     {a, b, c, otherVB},
     If[parentVB == vb || !SubvbundleQ[parentVB, vb], Throw[Message[DefCoordinateParameter::nsvb, vb, parentVB]]];
@@ -316,14 +324,18 @@ ReplaceIndicesRules[expr_, fromVB_, toVB_, opt: OptionsPattern[]] := Module[
 SyntaxInformation[ReplaceIndicesRules] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
 Protect@ReplaceIndicesRules;
 
-Options[ReplaceCovDs] = {OtherRules -> {}};
+Options[ReplaceCovDs] = {OtherRules -> {}, WithCMetricRule -> False};
 ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] := With[{
     gFrom = MetricOfCovD@cdFrom,
     gTo = MetricOfCovD@cdTo,
-    indRules = Select[OptionValue[OtherRules], ! AIndexQ[#[[1]]] &],
-    otherRules = Select[OptionValue[OtherRules], AIndexQ[#[[1]]] &]
+    indRules = Select[OptionValue[OtherRules], !AIndexQ[#[[1]]] &],
+    otherRules = Select[OptionValue[OtherRules], AIndexQ[#[[1]]] &],
+    wrapper = If[OptionValue[WithCMetricRule],
+        WithCMetricRule[#, First@MetricsOfVBundle@First@VBundlesOfCovD@cdTo, MetricOfCovD@cdTo] &,
+        Identity
+    ]
 },
-    expr /. Flatten@{
+    wrapper@Unevaluated[expr /. Flatten@{
         indRules,
         ReplaceIndicesRules[
             expr,
@@ -336,29 +348,29 @@ ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] := With[{
         Riemann[cdFrom] -> Riemann[cdTo],
         Ricci[cdFrom] -> Ricci[cdTo],
         RicciScalar[cdFrom] -> RicciScalar[cdTo]
-    } //. gFrom -> gTo (* some metrics may be left over if cdTo is an xCoba connection *)
+    }]
 ];
 SyntaxInformation[ReplaceCovDs] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
 Protect@ReplaceCovDs;
 
 DefRiemannVarD[cd_] := With[{
+    metric = MetricOfCovD@cd,
     RiemannCD = Riemann@cd,
     RicciCD = Ricci@cd,
-    RicciScalarCD = RicciScalar@cd
-}, Module[
-    {i, j},
-    {i, j} = GetIndicesOfVBundle[First@VBundlesOfCovD@cd, 2];
+    RicciScalarCD = RicciScalar@cd,
+    ii = GetIndicesOfVBundle[First@VBundlesOfCovD@cd, 2]
+},
     RiemannCD /: ImplicitTensorDepQ[RicciCD, RiemannCD] = True;
     RiemannCD /: ImplicitTensorDepQ[RicciScalarCD, RiemannCD] = True;
     (RicciCD /: VarD[RiemannCD[inds__], cd2_][RicciCD[a_, b_], rest_] := Module[
         {#1, #2},
-        VarD[RiemannCD[inds], cd2][RiemannCD[a, #1, b, #2], rest #3[-#1, -#2]]
-    ]) & @@ {i, j, MetricOfCovD@cd};
+        VarD[RiemannCD[inds], cd2][RiemannCD[a, #1, b, #2], rest metric[-#1, -#2]]
+    ]) & @@ ii;
     (RicciScalarCD /: VarD[RiemannCD[inds__], cd2_][RicciScalarCD[], rest_] := Module[
         {#1, #2},
-        VarD[RiemannCD[inds], cd2][RicciCD[#1, #2], rest #3[-#1, -#2]]
-    ]) & @@ {i, j, MetricOfCovD@cd};
-]];
+        VarD[RiemannCD[inds], cd2][RicciCD[#1, #2], rest metric[-#1, -#2]]
+    ]) & @@ ii;
+];
 SyntaxInformation[DefRiemannVarD] = {"ArgumentsPattern" -> {_}};
 UndefRiemannVarD[cd_] := With[{
     RiemannCD = Riemann@cd,
@@ -373,9 +385,41 @@ UndefRiemannVarD[cd_] := With[{
 SyntaxInformation[UndefRiemannVarD] = {"ArgumentsPattern" -> {_}};
 Protect[DefRiemannVarD, UndefRiemannVarD];
 
+Options[SetCMetricRule] = {MetricInv -> None};
+SetCMetricRule[metric_, cmetric_, opt: OptionsPattern[]] := With[{
+    inv = If[# =!= None, #, Inv@cmetric] &@OptionValue@MetricInv
+},
+    metric[a_?DownIndexQ, b_?DownIndexQ] := cmetric[a, b];
+    metric[a_?UpIndexQ, b_?UpIndexQ] := inv[a, b];
+];
+SyntaxInformation[SetCMetricRule] = {"ArgumentsPattern" -> {_, _, OptionsPattern[]}};
+Protect@SetCMetricRule;
+
+UnsetCMetricRule[metric_] := (
+    metric[a_?DownIndexQ, b_?DownIndexQ] =.;
+    metric[a_?UpIndexQ, b_?UpIndexQ] =.;
+);
+SyntaxInformation[UnsetCMetricRule] = {"ArgumentsPattern" -> {_}};
+Protect@UnsetCMetricRule;
+
+Options[WithCMetricRule] = Options[SetCMetricRule];
+WithCMetricRule[expr_, metric_, cmetric_, opt: OptionsPattern[]] := WithCleanup[
+    SetCMetricRule[metric, cmetric, opt],
+    expr,
+    UnsetCMetricRule[metric]
+];
+SetAttributes[WithCMetricRule, HoldFirst];
+SyntaxInformation[WithCMetricRule] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
+Protect@WithCMetricRule;
+
 BHTemperature[gtt_, grr_, gxx_, r_, r0_] := With[{fp = D[gtt/gxx, r], hp = D[1/grr, r]}, 1/(4 Pi) Sqrt[gxx fp hp] // Simplify // ReplaceAll[r -> r0]];
 SyntaxInformation[BHTemperature] = {"ArgumentsPattern" -> {_, _, _, _, _}};
 Protect@BHTemperature;
+
+DefineTensorSyntaxInformation[T_[inds___], deps_, sym_, opt: OptionsPattern[]] := (
+    SyntaxInformation[T] = {"ArgumentsPattern" -> Array[_ &, Length@{inds}]};
+);
+xTension["xTools`xTension`", DefTensor, "End"] := DefineTensorSyntaxInformation;
 
 End[];
 
