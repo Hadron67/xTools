@@ -61,6 +61,8 @@ OtherRules::usage = "OtherRules is an option for ReplaceIndicesRules and Replace
 
 MetricInv::usage = "MetricInv is an option for SetCMetricRule that specifies the inverse metric explicitly.";
 
+DefMetricNsd::usage = "DefMetricNsd[metric[-a, -b], covd, ...] calls DefMetric[1, metric[-a, -b], covd, ...] and then defines SignDetOfMetric[metric] as poison.";
+
 Protect[OtherRules, MetricInv];
 
 Begin["`Private`"];
@@ -256,20 +258,10 @@ CalculateDecomposedRicciScalar[cd_, ricciRules_] := Module[
 SyntaxInformation[CalculateDecomposedRicciScalar] = {"ArgumentsPattern" -> {_, _}};
 Protect@CalculateDecomposedRicciScalar;
 
-DecomposedRiemannRulesOf[_] = Null;
-DecomposedRicciRulesOf[_] = Null;
-DecomposedRicciScalarRuleOf[_] = Null;
-DecomposedChristoffelRulesOf[_] = Null;
-Protect[DecomposedChristoffelRulesOf, DecomposedRiemannRulesOf, DecomposedRicciRulesOf, DecomposedRicciScalarRuleOf];
-
-Lazy[expr_, cache_] := If[cache === Null, cache ^= expr, cache];
-SetAttributes[Lazy, HoldAll];
-Protect@Lazy;
-
-DecomposedChristoffelRules[cd_] := Lazy[CalculateDecomposedChristoffel[cd], DecomposedChristoffelRulesOf[cd]];
-DecomposedRiemannRules[cd_] := Lazy[CalculateDecomposedRiemann[cd, DecomposedChristoffelRules[cd]], DecomposedRiemannRulesOf[cd]];
-DecomposedRicciRules[cd_] := Lazy[CalculateDecomposedRicci[cd, DecomposedRiemannRules[cd]], DecomposedRicciRulesOf[cd]];
-DecomposedRicciScalarRule[cd_] := Lazy[CalculateDecomposedRicciScalar[cd, DecomposedRicciRules[cd]], DecomposedRicciScalarRuleOf[cd]];
+DecomposedChristoffelRules[cd_] := DecomposedChristoffelRules[cd] ^= CalculateDecomposedChristoffel[cd];
+DecomposedRiemannRules[cd_] := DecomposedRiemannRules[cd] ^= CalculateDecomposedRiemann[cd, DecomposedChristoffelRules[cd]];
+DecomposedRicciRules[cd_] := DecomposedRicciRules[cd] ^= CalculateDecomposedRicci[cd, DecomposedRiemannRules[cd]];
+DecomposedRicciScalarRule[cd_] := DecomposedRicciScalarRule[cd] ^= CalculateDecomposedRicciScalar[cd, DecomposedRicciRules[cd]];
 SyntaxInformation[DecomposedChristoffelRules] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[DecomposedRiemannRules] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[DecomposedRicciRules] = {"ArgumentsPattern" -> {_}};
@@ -282,10 +274,10 @@ AllDecomposedRules[cd_] := Flatten@{
     DecomposedRicciScalarRule[cd]
 };
 ClearDecomposedCache[cd_] := (
-    cd /: DecomposedChristoffelRulesOf[cd] =.;
-    cd /: DecomposedRiemannRulesOf[cd] =.;
-    cd /: DecomposedRicciRulesOf[cd] =.;
-    cd /: DecomposedRicciScalarRuleOf[cd] =.;
+    cd /: DecomposedChristoffelRules[cd] =.;
+    cd /: DecomposedRiemannRules[cd] =.;
+    cd /: DecomposedRicciRules[cd] =.;
+    cd /: DecomposedRicciScalarRule[cd] =.;
 );
 SyntaxInformation[AllDecomposedRules] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[ClearDecomposedCache] = {"ArgumentsPattern" -> {_}};
@@ -420,6 +412,16 @@ DefineTensorSyntaxInformation[T_[inds___], deps_, sym_, opt: OptionsPattern[]] :
     SyntaxInformation[T] = {"ArgumentsPattern" -> Array[_ &, Length@{inds}]};
 );
 xTension["xTools`xTension`", DefTensor, "End"] := DefineTensorSyntaxInformation;
+
+DefMetricNsd::nosigndet = "SignDet[`1`] is not defined.";
+DefMetricNsd[metric_[inds___], covd_, args___] := (
+    DefMetric[1, metric[inds], covd, args];
+    SignDetOfMetric[metric] ^:= Throw@Message[DefMetricNsd::nosigndet, metric];
+);
+SyntaxInformation[DefMetricNsd] = {"ArgumentsPattern" -> {_, _, ___}};
+Protect[DefMetricNsd];
+
+Protect[xTensorMsg];
 
 End[];
 
