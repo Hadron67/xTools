@@ -1,5 +1,7 @@
 BeginPackage["xTools`xTension`", {"xAct`xCore`", "xAct`xTensor`"}];
 
+(Unprotect[#]; Remove[#];) & /@ Names@{"xTools`xTension`*", "xTools`xTension`Private`*"};
+
 ToCanonicalN::usage = "Calls ToCanonical with UseMetricOnVBundle -> None.";
 SimplificationN::usage = "Calls Simplification[] using Implode.";
 
@@ -26,6 +28,8 @@ CalculateDecomposedRiemann::usage = "CalculateDecomposedRiemann[cd, chris] calcu
 CalculateDecomposedRicci::usage = "CalculateDecomposedRicci[cd, riemannRules] calculates decomposed Ricci tensor using CovD cd and decomposed rules of Riemann tensor riemannRules.";
 
 CalculateDecomposedRicciScalar::usage = "CalculateDecomposedRicciScalar[cd, ricciRules] calculates the decomposed Ricci scalar using CovD cd and decomposed Ricci tensor ricciRules.";
+
+ChristoffelToRiemann::usage = "ChristoffelToRiemann[expr, cd] or ChristoffelToRiemann[cd][expr] tries to convert all Christoffel tensors in expr if CovD cd to Riemann tensor.";
 
 DecomposedChristoffelRules::usage = "DecomposedChristoffelRules[cd] returns the decomposed Christoffel tensor rules of CovD cd, using cached result if already calculated.";
 
@@ -62,6 +66,18 @@ OtherRules::usage = "OtherRules is an option for ReplaceIndicesRules and Replace
 MetricInv::usage = "MetricInv is an option for SetCMetricRule that specifies the inverse metric explicitly.";
 
 DefMetricNsd::usage = "DefMetricNsd[metric[-a, -b], covd, ...] calls DefMetric[1, metric[-a, -b], covd, ...] and then defines SignDetOfMetric[metric] as poison.";
+
+FastReplaceDummies::usage = "FastReplaceDummies[expr] is a faster implementation of ReplaceDummies[expr].";
+
+ETensor::usage = "ETensor[expr, {freeIndices}] represents an expression with dummy and free indices.";
+
+ETensorProduct::usage = "ETensorProduct[e1, e2, ...] computes the tensor outer product of ETensors e1, e2, ...";
+
+ETensorTranspose::usage = "ETensorTranspose[ETensor[...], perms] performs the transpose of the ETensor.";
+
+ETensorDot::usage = "ETensorDot[T1...] computes the tensor dot for tensors expressed in ETensor form.";
+
+UniqueIndex::usage = "UniqueIndex[a] gets a unique and temporary a-index of the form a$*.";
 
 Protect[OtherRules, MetricInv];
 
@@ -197,6 +213,7 @@ CalculateDecomposedChristoffel[cd_] := Module[
 SyntaxInformation[CalculateDecomposedChristoffel] = {"ArgumentsPattern" -> {_}};
 Protect[SelectNonFlatCD, CalculateDecomposedChristoffel];
 
+ChristoffelToRiemann[cd_][expr_] := ChristoffelToRiemann[expr, cd];
 ChristoffelToRiemann[expr_, cd_] := Module[
     {vb, a, b, c, d, chris, riemann, rule},
     {a, b, c, d} = GetIndicesOfVBundle[VBundleOfMetric@MetricOfCovD@cd, 4];
@@ -421,7 +438,116 @@ DefMetricNsd[metric_[inds___], covd_, args___] := (
 SyntaxInformation[DefMetricNsd] = {"ArgumentsPattern" -> {_, _, ___}};
 Protect[DefMetricNsd];
 
-Protect[xTensorMsg];
+FastReplaceDummies[expr_] := Module @@ {
+    DeleteCases[
+        Union[
+            List @@ UpIndex /@ FindDummyIndices[expr]
+        ],
+        (* delete dollar indices by deleting temporary symbols *)
+        id_Symbol /; MemberQ[Attributes[id], Temporary]
+    ],
+    expr
+};
+SyntaxInformation[FastReplaceDummies] = {"ArgumentsPattern" -> {_}};
+Protect[FastReplaceDummies];
+
+SameIndexUDQ[a_Symbol, b_Symbol] = True;
+SameIndexUDQ[-a_Symbol, -b_Symbol] = True;
+SameIndexUDQ[_, _] = False;
+CopyIndexSign[from_Symbol, to_Symbol] := to;
+CopyIndexSign[-from_Symbol, to_Symbol] := -to;
+CompatibleIndexListsQ[l1_, l2_] := Length@l1 === Length@l2 && Inner[SameIndexUDQ, l1, l2, And];
+
+UniqueIndex[e_Symbol] := Module @@ ({{#}, #} &@xAct`xTensor`Private`NoDollar@e);
+UniqueIndex[-e_Symbol] := -UniqueIndex[e];
+
+(* ETensor *)
+ETensor::invldmlt = "Attempting to multiply two ETensors.";
+ETensor[expr_] := ETensor[expr, List @@ FindFreeIndices@expr];
+ETensor[expr_, {}] := Scalar[expr];
+ETensor[expr_, inds_List][inds2__] /; Length@inds === Length@{inds2} := Module[
+    {indPairs, matchedInds, unmatchedInds, unmatchedDummies, deltas},
+    indPairs = Thread@{inds, {inds2}};
+    matchedInds = Select[indPairs, SameIndexUDQ[#[[1]], #[[2]]] &];
+    unmatchedInds = Select[indPairs, !SameIndexUDQ[#[[1]], #[[2]]] &];
+    unmatchedDummies = UniqueIndex[UpIndex[#[[1]]]] & /@ unmatchedInds;
+    unmatchedInds = Append[#1, #2] & @@@ Transpose@{unmatchedInds, unmatchedDummies};
+    deltas = Times @@ (delta[ChangeIndex[CopyIndexSign[#1, #3]], #2] & @@@ unmatchedInds);
+    (FastReplaceDummies[expr] /. (UpIndex[#1] -> #3 & @@@ unmatchedInds))*deltas /. (#1 -> #2 & @@@ matchedInds)
+];
+ETensor /:
+    ETensor[expr1_, inds1_List] + ETensor[expr2_, inds2_List] /; CompatibleIndexListsQ[inds1, inds2] := (
+        ETensor[
+            FastReplaceDummies[expr1]
+            + (FastReplaceDummies[expr2] /. Thread[inds2 -> inds1])
+        , inds1]
+    );
+ETensor /: Times[ETensor[expr_, inds_], factors__] := (
+    If[Cases[{factors}, _ETensor], Message[ETensor::invldmlt]];
+    ETensor[Times[expr, factors], inds]
+);
+ETensor /: ToCanonical[ETensor[expr_, args__], opt___] := ETensor[ToCanonical[expr, opt], args];
+ETensor /: Simplification[ETensor[expr_, args__], opt___] := ETensor[Simplification[expr, opt], args];
+ETensor /: Simplify[ETensor[expr_, args__], opt___] := ETensor[Simplify[expr, opt], args];
+ETensor /: ScreenDollarIndices[ETensor[expr_, args__]] := ETensor[ScreenDollarIndices@expr, args];
+ETensor /: ParamD[params__][ETensor[expr_, args__]] := ETensor[ParamD[params][expr], args];
+ETensor /: FindFreeIndices[ETensor[_, inds_]] := IndexList @@ inds;
+
+SyntaxInformation[ETensor] = {"ArgumentsPattern" -> {_, _.}};
+Protect[ETensor];
+
+DedupeRules[inds1_, inds2_] := With[{
+    dupes = Intersection[UpIndex /@ inds1, UpIndex /@ inds2]
+}, If[Length@dupes > 0, Thread[dupes -> (UniqueIndex /@ dupes)], {}]];
+
+IndexedScalarQ[_ETensor | _List] = False;
+IndexedScalarQ[_] = True;
+
+ETensorProduct[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], rest___] := With[{
+    rep = DedupeRules[inds1, inds2]
+},
+    ETensorProduct[
+        ETensor[FastReplaceDummies[expr1] * (FastReplaceDummies[expr2] /. rep), Join[inds1, inds2 /. rep]],
+        rest
+    ]
+];
+ETensorProduct[left___, Zero, right___] = Zero;
+ETensorProduct[e_] := e;
+ETensorProduct[expr_ /; !MatchQ[expr, _List], l_List, rest___] := ETensorProduct[expr, #, rest] & /@ l;
+ETensorProduct[l_List, rest___] := ETensorProduct[#, rest] & /@ l;
+ETensorProduct[ETensor[expr_, inds_], x_?IndexedScalarQ, rest___] := ETensorProduct[ETensor[expr * x, inds], rest];
+ETensorProduct[x_?IndexedScalarQ, ETensor[expr_, inds_], rest___] := ETensorProduct[ETensor[expr * x, inds], rest];
+ETensorProduct[x_?IndexedScalarQ, y_?IndexedScalarQ, rest___] := x*y*If[Length@{rest} === 0, 1, ETensorProduct[rest]];
+SyntaxInformation[ETensorProduct] = {"ArgumentsPattern" -> {___}};
+Protect[ETensorProduct];
+
+ETensorDot0[ETensor[expr1_, {left___, a_}], ETensor[expr2_, {b_, right___}]] := With[{
+    bi = UniqueIndex@b
+},
+    ETensor[FastReplaceDummies[expr1] * (FastReplaceDummies[expr2] /. b -> bi) * delta[ChangeIndex@a, ChangeIndex@bi], {left, right}]
+];
+
+ETensorDot[a_ETensor, b_ETensor, rest___] := ETensorDot[ETensorDot0[a, b /. DedupeRules[a[[2]], b[[2]]]], rest];
+
+ETensorDot[left___, Zero, right___] = Zero;
+ETensorDot[ETensor[expr_, inds_], x_?IndexedScalarQ, rest___] := ETensorDot[ETensor[expr * x, inds], rest];
+ETensorDot[x_?IndexedScalarQ, ETensor[expr_, inds_], rest___] := ETensorDot[ETensor[expr * x, inds], rest];
+
+ETensorDot[expr_ /; !MatchQ[expr, _List], l_List, rest___] := ETensorDot[expr, #, rest] & /@ l;
+ETensorDot[l_List, rest___] := ETensorDot[#, rest] & /@ l;
+
+ETensorDot[e_] := e;
+SyntaxInformation[ETensorDot] = {"ArgumentsPattern" -> {___}};
+Protect[ETensorDot];
+
+ETensorTranspose[ETensor[expr_, inds_], perms_] := ETensor[expr, Permute[inds, perms]];
+ETensorTranspose[expr_, {}] := expr;
+ETensorTranspose[expr_, {_Integer}] := expr;
+ETensorTranspose[0, _] = 0;
+ETensorTranspose[Zero, _] = Zero;
+ETensorTranspose[expr_Plus, perms_] := ETensorTranspose[#, perms] /@ expr;
+SyntaxInformation[ETensorTranspose] = {"ArgumentsPattern" -> {_, _}};
+Protect[ETensorTranspose];
 
 End[];
 

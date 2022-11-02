@@ -59,3 +59,23 @@ VerificationTest[
 ];
 
 MUnit`EndTestSection[];
+
+MUnit`BeginTestSection["ETensor"];
+
+VerificationTest[
+    ETensor[metricMF[-MF`A, -MF`B]][MF`A, -MF`A],
+    dimx + 1
+];
+
+VerificationTest[
+    ETensor[metricMF[-MF`A, -MF`B]] - ETensor[metricMF[-MF`C, -MF`D]],
+    ETensor[0, {-MF`A, -MF`B}]
+];
+
+VerificationTest[
+    ETensorProduct[ETensor[metricMF[-MF`A, -MF`B]], ETensor[metricMF[-MF`A, MF`B]]]
+    - ETensor[metricMF[-MF`A, -MF`B] delta[-MF`C, MF`D], {-MF`A, -MF`B, -MF`C, MF`D}] // #[-MF`A, -MF`B, -MF`C, MF`D] &,
+    0
+];
+
+MUnit`EndTestSection[];
