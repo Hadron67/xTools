@@ -77,6 +77,12 @@ ETensorTranspose::usage = "ETensorTranspose[ETensor[...], perms] performs the tr
 
 ETensorDot::usage = "ETensorDot[T1...] computes the tensor dot for tensors expressed in ETensor form.";
 
+ETensorPD::usage = "ETensorPD[T, vb] or ETensorPD[vb][T] adds a PD to the ETensor.";
+
+ETensorContractTwo::usage = "ETensorContractTwo[T1, T2, {n1...}, {n2...}] contracts the n1... axes of T1 to n2.. axes of T2.";
+
+ETensorRank::usage = "ETensorRank[ETensor[...]] gives the rank of the ETensor.";
+
 UniqueIndex::usage = "UniqueIndex[a] gets a unique and temporary a-index of the form a$*.";
 
 Protect[OtherRules, MetricInv];
@@ -438,16 +444,9 @@ DefMetricNsd[metric_[inds___], covd_, args___] := (
 SyntaxInformation[DefMetricNsd] = {"ArgumentsPattern" -> {_, _, ___}};
 Protect[DefMetricNsd];
 
-FastReplaceDummies[expr_] := Module @@ {
-    DeleteCases[
-        Union[
-            List @@ UpIndex /@ FindDummyIndices[expr]
-        ],
-        (* delete dollar indices by deleting temporary symbols *)
-        id_Symbol /; MemberQ[Attributes[id], Temporary]
-    ],
-    expr
-};
+FastReplaceDummies[expr_] := With[{
+    rep = # -> UniqueIndex@# & /@ Union[List @@ UpIndex /@ FindDummyIndices[expr]]
+}, expr /. rep];
 SyntaxInformation[FastReplaceDummies] = {"ArgumentsPattern" -> {_}};
 Protect[FastReplaceDummies];
 
@@ -489,9 +488,14 @@ ETensor /: Times[ETensor[expr_, inds_], factors__] := (
 ETensor /: ToCanonical[ETensor[expr_, args__], opt___] := ETensor[ToCanonical[expr, opt], args];
 ETensor /: Simplification[ETensor[expr_, args__], opt___] := ETensor[Simplification[expr, opt], args];
 ETensor /: Simplify[ETensor[expr_, args__], opt___] := ETensor[Simplify[expr, opt], args];
-ETensor /: ScreenDollarIndices[ETensor[expr_, args__]] := ETensor[ScreenDollarIndices@expr, args];
 ETensor /: ParamD[params__][ETensor[expr_, args__]] := ETensor[ParamD[params][expr], args];
 ETensor /: FindFreeIndices[ETensor[_, inds_]] := IndexList @@ inds;
+ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
+    {dollars, rep},
+    dollars = Select[Union[UpIndex /@ inds], MemberQ[Attributes@#, Temporary] &];
+    rep = If[Length@dollars > 0, Thread[dollars -> GetIndicesOfVBundle[VBundleOfIndex@UpIndex@First@dollars, Length@dollars, UpIndex /@ FindIndices@expr]], {}];
+    ETensor[ScreenDollarIndices[expr /. rep], inds /. rep]
+];
 
 SyntaxInformation[ETensor] = {"ArgumentsPattern" -> {_, _.}};
 Protect[ETensor];
@@ -540,6 +544,27 @@ ETensorDot[e_] := e;
 SyntaxInformation[ETensorDot] = {"ArgumentsPattern" -> {___}};
 Protect[ETensorDot];
 
+ETensorContractTwo0[expr1_, inds1_, expr2_, inds2_, n1_List, n2_List] := With[{
+    a = inds1[[#]] & /@ n1,
+    b = inds2[[#]] & /@ n2
+},  With[{bi = UniqueIndex /@ b},
+    ETensor[FastReplaceDummies[expr1] * (FastReplaceDummies[expr2] /. Thread[b -> bi]) * (Times @@ (delta[ChangeIndex@#1, ChangeIndex@#2] & @@@ Thread@{a, bi})), Join[Delete[inds1, Transpose@{n1}], Delete[inds2, Transpose@{n2}]]]
+]];
+
+ETensorContractTwo[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], n1_, n2_] := With[{
+    rep = DedupeRules[inds1, inds2]
+}, ETensorContractTwo0[expr1, inds1, expr2 /. rep, inds2 /. rep, n1, n2]];
+ETensorContractTwo[ETensor[expr_, inds_], x_?IndexedScalarQ, {}, {}] := ETensor[expr * x, inds];
+ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[expr * x, inds];
+ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}, {}] := x * y;
+SyntaxInformation[ETensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _}};
+Protect[ETensorContractTwo];
+
+ETensorRank[ETensor[_, inds_]] := Length@inds;
+ETensorRank[_] = 0;
+SyntaxInformation[ETensorRank] = {"ArgumentsPattern" -> {_}};
+Protect[ETensorRank];
+
 ETensorTranspose[ETensor[expr_, inds_], perms_] := ETensor[expr, Permute[inds, perms]];
 ETensorTranspose[expr_, {}] := expr;
 ETensorTranspose[expr_, {_Integer}] := expr;
@@ -548,6 +573,13 @@ ETensorTranspose[Zero, _] = Zero;
 ETensorTranspose[expr_Plus, perms_] := ETensorTranspose[#, perms] /@ expr;
 SyntaxInformation[ETensorTranspose] = {"ArgumentsPattern" -> {_, _}};
 Protect[ETensorTranspose];
+
+ETensorPD[vb_][expr_] := ETensorPD[expr, vb];
+ETensorPD[ETensor[expr_, inds_], vb_] := With[{
+    ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
+}, ETensor[PD[-ai]@expr, Prepend[inds, -ai]]];
+SyntaxInformation[ETensorPD] = {"ArgumentsPattern" -> {_, _}};
+Protect[ETensorPD];
 
 End[];
 
