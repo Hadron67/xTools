@@ -496,6 +496,7 @@ ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
     rep = If[Length@dollars > 0, Thread[dollars -> GetIndicesOfVBundle[VBundleOfIndex@UpIndex@First@dollars, Length@dollars, UpIndex /@ FindIndices@expr]], {}];
     ETensor[ScreenDollarIndices[expr /. rep], inds /. rep]
 ];
+ETensor /: ChangeCovD[ETensor[expr_, inds_], args___] := ETensor[ChangeCovD[expr, args], inds];
 
 SyntaxInformation[ETensor] = {"ArgumentsPattern" -> {_, _.}};
 Protect[ETensor];
@@ -575,6 +576,9 @@ SyntaxInformation[ETensorTranspose] = {"ArgumentsPattern" -> {_, _}};
 Protect[ETensorTranspose];
 
 ETensorPD[vb_][expr_] := ETensorPD[expr, vb];
+ETensorPD[x_?IndexedScalarQ, vb_] := With[{
+    ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
+}, ETensor[PD[-ai]@x, {-ai}]];
 ETensorPD[ETensor[expr_, inds_], vb_] := With[{
     ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
 }, ETensor[PD[-ai]@expr, Prepend[inds, -ai]]];
