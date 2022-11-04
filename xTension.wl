@@ -232,6 +232,7 @@ ChristoffelToRiemann[expr_, cd_] := Module[
     }, MetricOn -> None, UseSymmetries -> False];
     ((expr /. rule) + expr) / 2
 ];
+SyntaxInformation[ChristoffelToRiemann] = {"ArgumentsPattern" -> {_, _.}};
 Protect@ChristoffelToRiemann;
 
 CalculateDecomposedRiemann[cd_, chrisRules_] := Module[
@@ -488,12 +489,13 @@ ETensor /: Times[ETensor[expr_, inds_], factors__] := (
 ETensor /: ToCanonical[ETensor[expr_, args__], opt___] := ETensor[ToCanonical[expr, opt], args];
 ETensor /: Simplification[ETensor[expr_, args__], opt___] := ETensor[Simplification[expr, opt], args];
 ETensor /: Simplify[ETensor[expr_, args__], opt___] := ETensor[Simplify[expr, opt], args];
+ETensor /: ContractMetric[ETensor[expr_, inds_], args___] := ETensor[ContractMetric[expr, args], inds];
 ETensor /: ParamD[params__][ETensor[expr_, args__]] := ETensor[ParamD[params][expr], args];
 ETensor /: FindFreeIndices[ETensor[_, inds_]] := IndexList @@ inds;
 ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
     {dollars, rep},
     dollars = Select[Union[UpIndex /@ inds], MemberQ[Attributes@#, Temporary] &];
-    rep = If[Length@dollars > 0, Thread[dollars -> GetIndicesOfVBundle[VBundleOfIndex@UpIndex@First@dollars, Length@dollars, UpIndex /@ FindIndices@expr]], {}];
+    rep = If[Length@dollars > 0, Thread[dollars -> GetIndicesOfVBundle[VBundleOfIndex@UpIndex@First@dollars, Length@dollars, Union[UpIndex /@ List @@ FindIndices@expr, UpIndex /@ inds]]], {}];
     ETensor[ScreenDollarIndices[expr /. rep], inds /. rep]
 ];
 ETensor /: ChangeCovD[ETensor[expr_, inds_], args___] := ETensor[ChangeCovD[expr, args], inds];
