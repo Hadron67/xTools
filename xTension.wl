@@ -66,6 +66,7 @@ OtherRules::usage = "OtherRules is an option for ReplaceIndicesRules and Replace
 MetricInv::usage = "MetricInv is an option for SetCMetricRule that specifies the inverse metric explicitly.";
 
 DefMetricNsd::usage = "DefMetricNsd[metric[-a, -b], covd, ...] calls DefMetric[1, metric[-a, -b], covd, ...] and then defines SignDetOfMetric[metric] as poison.";
+NoSignDet::usage = "NoSignDet can be used as the first argument of DefMetric to specify a metric with undefined signdet.";
 
 FastReplaceDummies::usage = "FastReplaceDummies[expr] is a faster implementation of ReplaceDummies[expr].";
 
@@ -82,6 +83,8 @@ ETensorPD::usage = "ETensorPD[T, vb] or ETensorPD[vb][T] adds a PD to the ETenso
 ETensorContractTwo::usage = "ETensorContractTwo[T1, T2, {n1...}, {n2...}] contracts the n1... axes of T1 to n2.. axes of T2.";
 
 ETensorRank::usage = "ETensorRank[ETensor[...]] gives the rank of the ETensor.";
+
+ToETensor::usage = "ToETensor[T] converts tensor head T to ETensor.";
 
 UniqueIndex::usage = "UniqueIndex[a] gets a unique and temporary a-index of the form a$*.";
 
@@ -445,6 +448,13 @@ DefMetricNsd[metric_[inds___], covd_, args___] := (
 SyntaxInformation[DefMetricNsd] = {"ArgumentsPattern" -> {_, _, ___}};
 Protect[DefMetricNsd];
 
+NoSignDet::nsd = "SignDetOfMetric[`1`] is not defined.";
+NoSignDet /: DefMetric[NoSignDet, metric_[inds___], args___] := (
+    DefMetric[1, metric[inds], args];
+    SignDetOfMetric[metric] ^:= Throw@Message[NoSignDet::nsd, metric];
+);
+Protect[NoSignDet];
+
 FastReplaceDummies[expr_] := With[{
     rep = # -> UniqueIndex@# & /@ Union[List @@ UpIndex /@ FindDummyIndices[expr]]
 }, expr /. rep];
@@ -557,6 +567,7 @@ ETensorContractTwo0[expr1_, inds1_, expr2_, inds2_, n1_List, n2_List] := With[{
 ETensorContractTwo[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], n1_, n2_] := With[{
     rep = DedupeRules[inds1, inds2]
 }, ETensorContractTwo0[expr1, inds1, expr2 /. rep, inds2 /. rep, n1, n2]];
+ETensorContractTwo[a_, b_, n_Integer] := ETensorContractTwo[a, b, Range[-n, -1], Range@n];
 ETensorContractTwo[ETensor[expr_, inds_], x_?IndexedScalarQ, {}, {}] := ETensor[expr * x, inds];
 ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[expr * x, inds];
 ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}, {}] := x * y;
@@ -567,6 +578,17 @@ ETensorRank[ETensor[_, inds_]] := Length@inds;
 ETensorRank[_] = 0;
 SyntaxInformation[ETensorRank] = {"ArgumentsPattern" -> {_}};
 Protect[ETensorRank];
+
+GetIndicesFromUpDownVBundle[vb_Symbol?VBundleQ, count_, exclude_] := GetIndicesOfVBundle[vb, count, exclude];
+GetIndicesFromUpDownVBundle[-vb_Symbol?VBundleQ, count_, exclude_] := -GetIndicesOfVBundle[vb, count, exclude];
+ToETensor[t_?xTensorQ] := With[{
+    inds = Fold[Join[#1, GetIndicesFromUpDownVBundle[#2, 1, Union[UpIndex /@ #1]]] &, {}, SlotsOfTensor@t]
+}, ETensor[t @@ inds, inds]];
+ToETensor[t_?xTensorQ, indsSign_List] := With[{
+    inds = Fold[Join[#1, GetIndicesOfVBundle[#2, 1, Union[UpIndex /@ #1]]] &, {}, SlotsOfTensor@t] * indsSign
+}, ETensor[t @@ inds, inds]] /; Length@SlotsOfTensor@t === Length@indsSign;
+SyntaxInformation[ToETensor] = {"ArgumentsPattern" -> {_, _.}};
+Protect[ToETensor];
 
 ETensorTranspose[ETensor[expr_, inds_], perms_] := ETensor[expr, Permute[inds, perms]];
 ETensorTranspose[expr_, {}] := expr;
@@ -579,7 +601,7 @@ Protect[ETensorTranspose];
 
 ETensorPD[vb_][expr_] := ETensorPD[expr, vb];
 ETensorPD[x_?IndexedScalarQ, vb_] := With[{
-    ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
+    ai = First@GetIndicesOfVBundle[vb, 1]
 }, ETensor[PD[-ai]@x, {-ai}]];
 ETensorPD[ETensor[expr_, inds_], vb_] := With[{
     ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
