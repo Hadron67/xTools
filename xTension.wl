@@ -90,6 +90,8 @@ ToETensor::usage = "ToETensor[T] converts tensor head T to ETensor.";
 
 UniqueIndex::usage = "UniqueIndex[a] gets a unique and temporary a-index of the form a$*.";
 
+IndexRangeNS::usage = "IndexRangeNS[ns`a, ns`p] is similiar to IndexRange[a, p] but the returned indices are prefixed with namespace ns`.";
+
 Protect[OtherRules, MetricInv];
 
 Begin["`Private`"];
@@ -617,6 +619,26 @@ ZeroETensor[vbs_] := ETensor[0, Fold[With[{
 }, Join[#1, If[MatchQ[#2, _Symbol], ind, -ind]]] &, {}, vbs]];
 SyntaxInformation[ZeroETensor] = {"ArgumentsPattern" -> {_}};
 Protect[ZeroETensor];
+
+ExtractNS[s_Symbol] := With[{
+    str = ToString@s,
+    pos = StringPosition[ToString@s, "`"]
+}, If[Length@pos > 0,
+    {StringTake[str, pos[[1, 1]] - 1], StringDrop[str, pos[[1, 1]]]}
+,
+    {None, str}
+]];
+JoinNS[ns_String, str_String] := ns <> "`" <> str;
+JoinNS[None, str_String] := str;
+
+IndexRangeNS::nsne = "Symbols have different namespaces `1` and `2`.";
+IndexRangeNS[a_Symbol, p_Symbol] := Module[
+    {ns1, a1, ns2, a2},
+    {ns1, a1} = ExtractNS@a;
+    {ns2, a2} = ExtractNS@p;
+    If[ns1 =!= ns2, Throw@Message[IndexRangeNS::nsne, ns1, ns2]];
+    Symbol[JoinNS[ns1, #]] & /@ CharacterRange[a1, a2]
+];
 
 End[];
 

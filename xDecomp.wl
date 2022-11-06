@@ -278,9 +278,9 @@ GetAllHeldTensors[holder_] := Union[
     Replace[#[[1]], {
         HoldPattern[Verbatim[HoldPattern][CachedGCTensor[holder, t_, _]]] :> t,
         HoldPattern[Verbatim[HoldPattern][HeldGCTensor[holder, t_]]] :> t,
-        _ -> None
+        _ -> Nothing
     }] & /@ UpValues[holder]
-] // DeleteCases[None];
+];
 SyntaxInformation[GetAllHeldTensors] = {"ArgumentsPattern" -> {_}};
 Protect[GetAllHeldTensors];
 
@@ -607,7 +607,7 @@ SignedVBundleOfIndex[-id_Symbol] := -VBundleOfIndex@id;
 
 (* CreateGCTensorOneComponent[{coords__} -> expr_, charts_List] := ; *)
 PartOrNone[expr_, n_Integer /; n > 0] := expr[[n]];
-PartOrNone[_, n_Integer /; n <= 0] = None;
+PartOrNone[_, n_Integer /; n <= 0] = Nothing;
 PartSpecFromComponentSpec[spec_List, params_, subVBundles_] := MapThread[
     {s, p, v} |-> With[{
         ppos = FirstPosition[p, s]
@@ -617,12 +617,12 @@ PartSpecFromComponentSpec[spec_List, params_, subVBundles_] := MapThread[
         Length@p + FirstPosition[subVBundles, SignedVBundleOfIndex@s][[1]]
     ]]
 , {spec, params, subVBundles}];
-InitGCTensorElement[clens_, subVBundles_][indices__] := ZeroETensor@DeleteCases[MapThread[PartOrNone, {subVBundles, {indices} - clens}], None];
+InitGCTensorElement[clens_, subVBundles_][indices__] := ZeroETensor@MapThread[PartOrNone, {subVBundles, {indices} - clens}];
 AddGCTensorElement[params_, subVBundles_][arr_, spec_List -> expr_] := Module[
     {inds, ainds, elem},
     inds = PartSpecFromComponentSpec[spec, params, subVBundles];
     clens = Length /@ params;
-    ainds = DeleteCases[MapThread[If[#2 > 0, #1, None] &, {spec, inds - clens}], None];
+    ainds = MapThread[If[#2 > 0, #1, Nothing] &, {spec, inds - clens}];
     With[{
         ainds2 = List @@ FindFreeIndices@expr
     }, If[ainds =!= ainds2, Throw@Message[CreateGCTensor::unmatched, ainds, ainds2]]];

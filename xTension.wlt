@@ -3,8 +3,8 @@ $DefInfoQ = False;
 
 DefConstantSymbol[dimx];
 DefManifold[MR, 1, {MR`r1, MR`r2, MR`r3, MR`r4}];
-DefManifold[MX, dimx, {MX`a, MX`b, MX`c, MX`d, MX`e, MX`f}];
-DefManifold[MF, {MR, MX}, {MF`A, MF`B, MF`C, MF`D, MF`E, MF`F}];
+DefManifold[MX, dimx, IndexRangeNS[MX`a, MX`f]];
+DefManifold[MF, {MR, MX}, IndexRangeNS[MF`A, MF`F]];
 DefParameter[r];
 DefConstantSymbol[L0];
 DefConstantSymbol[Lt];
