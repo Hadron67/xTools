@@ -11,21 +11,21 @@ DefMetric[NoSignDet, metricMf[-Mf`A, -Mf`B], CDMf];
 DefMetric[NoSignDet, metricMx[-Mx`a, -Mx`b], CDMx];
 DefGBasis[decomp, {{et[Mf`A], edt[-Mf`A], t}, {er[Mf`A], edr[-Mf`A], r}}, {eX[Mx`a, -Mf`A]}];
 
+metricVal = CreateGCTensor[{
+    {-t, -t} -> -h[r],
+    {-r, -r} -> 1 / f[r],
+    {-Mx`a, -Mx`b} -> r^2 metricMx[-Mx`a, -Mx`b]
+}, -{decomp, decomp}];
+
+metricInvVal = CreateGCTensor[{
+    {t, t} -> -1 / h[r],
+    {r, r} -> f[r],
+    {Mx`a, Mx`b} -> 1 / r^2 metricMx[Mx`a, Mx`b]
+}, {decomp, decomp}];
+
 MUnit`BeginTestSection["Decomposing SSS metric ansatze"];
 
-SetHeldMetric[covd1, metricMf,
-    CreateGCTensor[{
-        {-t, -t} -> -h[r],
-        {-r, -r} -> 1 / f[r],
-        {-Mx`a, -Mx`b} -> r^2 metricMx[-Mx`a, -Mx`b]
-    }, -{decomp, decomp}]
-,
-    CreateGCTensor[{
-        {t, t} -> -1 / h[r],
-        {r, r} -> f[r],
-        {Mx`a, Mx`b} -> 1 / r^2 metricMx[Mx`a, Mx`b]
-    }, {decomp, decomp}]
-];
+SetHeldMetric[covd1, metricMf, metricVal, metricInvVal];
 AddCurvatureTensorsToHolder[covd1, decomp, ChristoffelCDMf];
 VerificationTest[
     CachedGCTensor[covd1, RicciScalarCDMf, {}][],
@@ -64,7 +64,7 @@ VerificationTest[
 
 MUnit`EndTestSection[];
 
-UndefTensor /@ {et, edt, er, edr, eX};
+UndefGBasis@decomp;
 Undef /@ VisitorsOf@metricMf;
 Undef /@ VisitorsOf@metricMx;
 UndefMetric /@ {metricMx, metricMf};
