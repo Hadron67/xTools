@@ -80,6 +80,8 @@ ETensorDot::usage = "ETensorDot[T1...] computes the tensor dot for tensors expre
 
 ETensorPD::usage = "ETensorPD[T, vb] or ETensorPD[vb][T] adds a PD to the ETensor.";
 
+ZeroETensor::usage = "ZeroETensor[vbs] creates a zero ETensor.";
+
 ETensorContractTwo::usage = "ETensorContractTwo[T1, T2, {n1...}, {n2...}] contracts the n1... axes of T1 to n2.. axes of T2.";
 
 ETensorRank::usage = "ETensorRank[ETensor[...]] gives the rank of the ETensor.";
@@ -608,6 +610,13 @@ ETensorPD[ETensor[expr_, inds_], vb_] := With[{
 }, ETensor[PD[-ai]@expr, Prepend[inds, -ai]]];
 SyntaxInformation[ETensorPD] = {"ArgumentsPattern" -> {_, _}};
 Protect[ETensorPD];
+
+ZeroETensor[{}] = 0;
+ZeroETensor[vbs_] := ETensor[0, Fold[With[{
+    ind = GetIndicesOfVBundle[#2, 1, UpIndex /@ #1]
+}, Join[#1, If[MatchQ[#2, _Symbol], ind, -ind]]] &, {}, vbs]];
+SyntaxInformation[ZeroETensor] = {"ArgumentsPattern" -> {_}};
+Protect[ZeroETensor];
 
 End[];
 

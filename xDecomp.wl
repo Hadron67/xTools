@@ -20,7 +20,7 @@ ClearGCTensorHolderCache::usage = "ClearGCTensorHolderCache[holder] clears the t
 GCTensorHolderQ::usage = "GCTensorHolderQ[covd] gives True for GCovD.";
 
 SetHeldMetric::usage = "SetHeldMetric[holder, metric, invMetric] sets the metric of the holder.";
-AddCommonTensorsToHolder::usage = "AddCommonTensorsToHolder[holder, chart] defines some common tensors (Christoffel, Riemann, etc) to the holder.";
+AddCurvatureTensorsToHolder::usage = "AddCurvatureTensorsToHolder[holder, chart, christoffelTensor] defines curvature tensors to the holder, using the given Christoffel tensor.";
 
 HeldGCTensor::usage = "HeldGCTensor[holder, tensor] gives the tensor provider of the tensor.";
 GCTensorHolderAction::usage = "GCTensorHolderAction[holder, tag, expr] defines some extra action applies in various computation stages. Typically used to simplify expressions.";
@@ -45,7 +45,9 @@ HeadOfCoordinateIndex::usage = "HeadOfCoordinateIndex is an option of GCTensorTo
 ExcludeZeros::usage = "ExcludeZeros is a boolean option of GCTensorToComponentRules. When True, only non-zero components are listed.";
 
 ContractGCTensors::usage = "ContractGCTensors[expr, covd] performs contractions of GCTensor's, use metric if needed.";
-FixGCTensor::usage = "FixGCTensor[GCTensor[...]] fixes some ";
+ValidateGCTensor::usage = "ValidateGCTensor[GCTensor[...]] fixes some ";
+ZeroGCTensor::usage = "ZeroGCTensor[charts] creats a GCTensor with zero components.";
+CreateGCTensor::usage = "CreateGCTensor[{{r1, r2, ...} -> expr}, charts] is a convenient function for creating GCTensors.";
 GCTensorPD::usage = "GCTensorPD[expr, chart] calculates the partial derivative of the tensor expression in chart.";
 
 RecoverSubRiemannTensors::usage = "RecoverSubRiemannTensors[GCTensor[..., {-c1, -c2, -c3, -c4}]] replaces Christoffel tensors of sub manifolds with Riemann tensors.";
@@ -64,7 +66,8 @@ SubManifoldsOfGChart[_] = None;
 MetricOfGChart[_] = None;
 GChartMetricDecompose[_, expr_] := expr;
 VBundleOfGChart[chart_] := First@SlotsOfTensor@CoordsOfGChart[chart][[1, 1]];
-SubvbundlesOfGChart[chart_] := SlotsOfTensor[#][[1]] & /@ SubManifoldsOfGChart[chart];
+SubvbundlesOfGChart[chart_Symbol] := SlotsOfTensor[#][[1]] & /@ SubManifoldsOfGChart[chart];
+SubvbundlesOfGChart[-chart_Symbol] := -SubvbundlesOfGChart[chart];
 SyntaxInformation[GChartQ] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[CoordsOfGChart] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[SubManifoldsOfGChart] = {"ArgumentsPattern" -> {_}};
@@ -164,9 +167,9 @@ Protect[HeldGCTensor];
 
 GCTensorHolderAction[holder_, tag_, expr_] := GCTensorHolderDefaultAction[holder, tag, expr];
 GCTensorHolderDefaultAction[holder, _, e_] := e;
-GCTensorHolderDefaultAction[_, "PostChangeIndex"[tensor_, inds_, i_], expr_] := ContractMetric[expr];
-GCTensorHolderDefaultAction[_, "PostChangeIndex"[tensor_, inds_, i_], expr: GCTensor[arr_, basis_]] := ContractMetric[expr, First@MetricsOfVBundle@# & /@ SubvbundlesOfGChart@UpBasis@basis[[i]]];
-GCTensorHolderDefaultAction[_, "PostCommonTensorCalculation"[tensor_], expr_] := ToCanonical[expr, UseMetricOnVBundle -> None];
+GCTensorHolderDefaultAction[_, "PostChangeIndex"[tensor_, inds_, i_], expr_] := Simplification@ContractMetric[expr];
+GCTensorHolderDefaultAction[_, "PostChangeIndex"[tensor_, inds_, i_], expr: GCTensor[arr_, basis_]] := Simplification@ContractMetric[expr, First@MetricsOfVBundle@# & /@ SubvbundlesOfGChart@UpBasis@basis[[i]]];
+GCTensorHolderDefaultAction[_, "PostCurvatureTensorCalculation"[tensor_], expr_] := Simplify@ToCanonical[expr, UseMetricOnVBundle -> None];
 SyntaxInformation[GCTensorHolderAction] = {"ArgumentsPattern" -> {_, _, _}};
 SyntaxInformation[GCTensorHolderDefaultAction] = {"ArgumentsPattern" -> {_, _, _}};
 Protect[GCTensorHolderAction, GCTensorHolderDefaultAction];
@@ -203,11 +206,11 @@ SetHeldMetric[holder_Symbol, metric_, metrici_GCTensor, invMetric_GCTensor] := (
 SyntaxInformation[SetHeldMetric] = {"ArgumentsPattern" -> {_, _, _, _}};
 Protect[SetHeldMetric];
 
-AddCommonTensorsToHolder[holder_Symbol, chart_?GChartQ] := Module[
+AddCurvatureTensorsToHolder[holder_Symbol, chart_?GChartQ, chris_] := Module[
     {vb, metric, cd, temp, a0, b0, c0, d0},
     vb = VBundleOfGChart@chart;
     metric = First@MetricsOfVBundle@vb;
-    cd = CovDOfMetric@metric;
+    cd = MasterOf@chris;
     {a0, b0, c0, d0} = GetIndicesOfVBundle[vb, 4];
 
     With[{
@@ -219,7 +222,6 @@ AddCommonTensorsToHolder[holder_Symbol, chart_?GChartQ] := Module[
         subMetrics = First@MetricsOfVBundle@# & /@ SubvbundlesOfGChart@chart,
         metric = First@MetricsOfVBundle@vb,
         cd2 = cd,
-        chris = Christoffel[cd][a0, -b0, -c0][[0]],
         riem = Riemann@cd,
         ricci = Ricci@cd,
         ricciScalar = RicciScalar@cd
@@ -233,7 +235,7 @@ AddCommonTensorsToHolder[holder_Symbol, chart_?GChartQ] := Module[
         ,
             {a, -b, -c}
         ] // Fold[ChangeCovD[#1, PD, #2] &, #, subCDs] &
-        // GCTensorHolderAction[holder, "PostCommonTensorCalculation"[chris], #] &;
+        // GCTensorHolderAction[holder, "PostCurvatureTensorCalculation"[chris], #] &;
 
         (* Riemann tensor *)
         holder /: HeldGCTensor[holder, riem] := ETensor[
@@ -248,7 +250,7 @@ AddCommonTensorsToHolder[holder_Symbol, chart_?GChartQ] := Module[
         // Fold[ChristoffelToGradMetric, #, subMetrics] &
         // Fold[ChangeCovD[#1, PD, #2] &, #, subCDs] &
         // ContractMetric[#, subMetrics] &
-        // GCTensorHolderAction[holder, "PostCommonTensorCalculation"[riem], #] &;
+        // GCTensorHolderAction[holder, "PostCurvatureTensorCalculation"[riem], #] &;
 
         (* Ricci tensor *)
         holder /: HeldGCTensor[holder, ricci] := ETensor[
@@ -256,21 +258,21 @@ AddCommonTensorsToHolder[holder_Symbol, chart_?GChartQ] := Module[
         ,
             {-a, -b}
         ] // ContractMetric[#, subMetrics] &
-        // GCTensorHolderAction[holder, "PostCommonTensorCalculation"[ricci], #] &;
+        // GCTensorHolderAction[holder, "PostCurvatureTensorCalculation"[ricci], #] &;
 
         (* Ricci scalar *)
         holder /: HeldGCTensor[holder, ricciScalar] := GCTensor[
             CachedGCTensor[holder, ricci][-a, -b] CachedGCTensor[holder, metric][a, b]
             // ContractGCTensors[holder]
             // Simplify
-            // GCTensorHolderAction[holder, "PostCommonTensorCalculation"[ricciScalar], #] &
+            // GCTensorHolderAction[holder, "PostCurvatureTensorCalculation"[ricciScalar], #] &
         ,
             {}
         ];
     ];
 ];
-SyntaxInformation[AddCommonTensorsToHolder] = {"ArgumentsPattern" -> {_, _}};
-Protect[AddCommonTensorsToHolder];
+SyntaxInformation[AddCurvatureTensorsToHolder] = {"ArgumentsPattern" -> {_, _, _}};
+Protect[AddCurvatureTensorsToHolder];
 
 GetAllHeldTensors[holder_] := Union[
     Replace[#[[1]], {
@@ -592,6 +594,56 @@ GCTensor /: x_?xAct`xTensor`Private`NonIndexedScalarQ * GCTensor[arr_, basis_][i
 
 SyntaxInformation[GCTensor] = {"ArgumentsPattern" -> {_, _}};
 Protect[GCTensor];
+
+ValidateGCTensor[GCTensor[arr_, basis_]] := With[{
+    subMs = SubManifoldsOfGChart@UpBasis@# & /@ basis,
+    pms = If[MatchQ[#, _Symbol], 1, -1] & /@ basis
+}];
+SyntaxInformation[ValidateGCTensor] = {"ArgumentsPattern" -> {_}};
+Protect[ValidateGCTensor];
+
+SignedVBundleOfIndex[id_Symbol] := VBundleOfIndex@id;
+SignedVBundleOfIndex[-id_Symbol] := -VBundleOfIndex@id;
+
+(* CreateGCTensorOneComponent[{coords__} -> expr_, charts_List] := ; *)
+PartOrNone[expr_, n_Integer /; n > 0] := expr[[n]];
+PartOrNone[_, n_Integer /; n <= 0] = None;
+PartSpecFromComponentSpec[spec_List, params_, subVBundles_] := MapThread[
+    {s, p, v} |-> With[{
+        ppos = FirstPosition[p, s]
+    }, If[!MatchQ[ppos, _Missing],
+        ppos[[1]]
+    ,
+        Length@p + FirstPosition[subVBundles, SignedVBundleOfIndex@s][[1]]
+    ]]
+, {spec, params, subVBundles}];
+InitGCTensorElement[clens_, subVBundles_][indices__] := ZeroETensor@DeleteCases[MapThread[PartOrNone, {subVBundles, {indices} - clens}], None];
+AddGCTensorElement[params_, subVBundles_][arr_, spec_List -> expr_] := Module[
+    {inds, ainds, elem},
+    inds = PartSpecFromComponentSpec[spec, params, subVBundles];
+    clens = Length /@ params;
+    ainds = DeleteCases[MapThread[If[#2 > 0, #1, None] &, {spec, inds - clens}], None];
+    With[{
+        ainds2 = List @@ FindFreeIndices@expr
+    }, If[ainds =!= ainds2, Throw@Message[CreateGCTensor::unmatched, ainds, ainds2]]];
+    elem = If[Length@ainds > 0, ETensor[expr, ainds], expr];
+    ReplacePart[arr, inds -> elem]
+];
+CreateGCTensor::unmatched = "Indices `1` and `2` don't match.";
+CreateGCTensor[{components__}, charts_] := Module[
+    {dim, arrDim, params, subVBundles, ret},
+    dim = Length@charts;
+    params = MapThread[If[MatchQ[#1, _Symbol], #2, -#2] &, {charts, CoordParamsOfGChart /@ charts}];
+    subVBundles = SubvbundlesOfGChart /@ charts;
+    ret = Fold[
+        AddGCTensorElement[params, subVBundles],
+        Array[InitGCTensorElement[Length /@ params, subVBundles], (Length /@ params) + (Length /@ subVBundles)],
+        {components}
+    ];
+    GCTensor[ret, charts]
+];
+SyntaxInformation[CreateGCTensor] = {"ArgumentsPattern" -> {_, _}};
+Protect[CreateGCTensor];
 
 GCTensorPD[chart_][expr_] := GCTensorPD[expr, chart];
 GCTensorPD[GCTensor[arr_, basis_], chart_] := With[{

@@ -1,8 +1,6 @@
 << xTension`;
 $DefInfoQ = False;
 
-MUnit`BeginTestSection["FG expansion"];
-
 DefConstantSymbol[dimx];
 DefManifold[MR, 1, {MR`r1, MR`r2, MR`r3, MR`r4}];
 DefManifold[MX, dimx, {MX`a, MX`b, MX`c, MX`d, MX`e, MX`f}];
@@ -15,6 +13,9 @@ DefMetric[1, metricMX[-MX`a, -MX`b], CDMX, OtherDependencies -> {r}, PrintAs -> 
 DefMetric[1, metricMF[-MF`A, -MF`B], CDMF, OtherDependencies -> {r}, PrintAs -> "g", SymbolOfCovD -> {";", "D"}];
 
 DefCoordinateParameter[TangentMF -> TangentMR, r, eMR, edMR];
+
+MUnit`BeginTestSection["FG expansion"];
+
 SetDecomposedRules[metricMF[-a_, -b_], DiagonalMatrix@{Lt^2/(4 r^2) edMR[-a] edMR[-b], 1/r metricMX[-a, -b]}];
 SetDecomposedRules[metricMF[a_, b_], DiagonalMatrix@{(4 r^2)/Lt^2 eMR[a] eMR[b], r metricMX[a, b]}];
 
@@ -79,3 +80,13 @@ VerificationTest[
 ];
 
 MUnit`EndTestSection[];
+
+UndefTensor /@ {eMR, edMR};
+Undef /@ VisitorsOf@metricMX;
+Undef /@ VisitorsOf@metricMF;
+UndefMetric[metricMX];
+UndefMetric[metricMF];
+Undef /@ VisitorsOf@MX;
+UndefConstantSymbol /@ {L0, Lt, Lambda0, dimx};
+UndefManifold /@ {MF, MR, MX};
+UndefParameter[r];
