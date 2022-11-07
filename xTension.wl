@@ -1,4 +1,4 @@
-BeginPackage["xTools`xTension`", {"xAct`xCore`", "xAct`xTensor`"}];
+BeginPackage["xTools`xTension`", {"xAct`xCore`", "xAct`xTensor`", "xAct`xPerm`", "xAct`SymManipulator`"}];
 
 (Unprotect[#]; Remove[#];) & /@ Names@{"xTools`xTension`*", "xTools`xTension`Private`*"};
 
@@ -91,6 +91,8 @@ ToETensor::usage = "ToETensor[T] converts tensor head T to ETensor.";
 UniqueIndex::usage = "UniqueIndex[a] gets a unique and temporary a-index of the form a$*.";
 
 IndexRangeNS::usage = "IndexRangeNS[ns`a, ns`p] is similiar to IndexRange[a, p] except the returned indices are prefixed with namespace ns`.";
+
+EulerDensityP::usage = "EulerDensityP[riem, D] gives the D dimension Euler density with Riemann tensor riem. Similar to xAct`xTras`EulerDensity except it does not multiply SigDet[metric].";
 
 Protect[OtherRules, MetricInv];
 
@@ -629,6 +631,20 @@ IndexRangeNS[a_Symbol, p_Symbol] := With[{
 IndexRangeNS[a_Symbol, p_Symbol] := Throw@Message[IndexRangeNS::nsne, Context@a, Context@p] /; Context@a =!= Context@p;
 SyntaxInformation[IndexRangeNS] = {"ArgumentsPattern" -> {_, _}};
 Protect[IndexRangeNS];
+
+EulerDensityP[riem_, dim_?EvenQ] := With[{
+    inds = GetIndicesOfVBundle[-First@SlotsOfTensor@riem, 2dim],
+    rangDim = Range@dim
+}, With[{
+    riemProd = Product[riem[Slot[2i - 1], Slot[2i], -inds[[2i - 1]], -inds[[2i]]], {i, 1, dim / 2}]
+},
+    SameDummies@Total[Signature@# * ToCanonical[riemProd & @@#] &@PermuteList[inds, InversePerm@#] & /@ TransversalInSymmetricGroup[
+        StrongGenSet[rangDim, GenSet @@ (Cycles /@ Partition[rangDim, 2])],
+        Symmetric@rangDim
+    ]]
+]];
+SyntaxInformation[EulerDensityP] = {"ArgumentsPattern" -> {_, _}};
+Protect[EulerDensityP];
 
 End[];
 
