@@ -74,8 +74,6 @@ ETensorProduct::usage = "ETensorProduct[e1, e2, ...] computes the tensor outer p
 
 ETensorTranspose::usage = "ETensorTranspose[ETensor[...], perms] performs the transpose of the ETensor.";
 
-ETensorDot::usage = "ETensorDot[T1...] computes the tensor dot for tensors expressed in ETensor form.";
-
 ETensorPD::usage = "ETensorPD[T, vb] or ETensorPD[vb][T] adds a PD to the ETensor.";
 
 ZeroETensor::usage = "ZeroETensor[vbs] creates a zero ETensor.";
@@ -538,31 +536,6 @@ ETensorProduct[x_?IndexedScalarQ, ETensor[expr_, inds_], rest___] := ETensorProd
 ETensorProduct[x_?IndexedScalarQ, y_?IndexedScalarQ, rest___] := x*y*If[Length@{rest} === 0, 1, ETensorProduct[rest]];
 SyntaxInformation[ETensorProduct] = {"ArgumentsPattern" -> {___}};
 Protect[ETensorProduct];
-
-ETensorDot0[ETensor[expr1_, {left___, a_}], ETensor[expr2_, {b_, right___}]] := With[{
-    bi = UniqueIndex@b
-},
-    ETensor[ReplaceDummies[expr1] * ReplaceIndex[ReplaceDummies[expr2], {b -> bi}] * delta[ChangeIndex@a, ChangeIndex@bi], {left, right}]
-];
-
-(* ETensorDot[a_ETensor, b_ETensor, rest___] := ETensorDot[ETensorDot0[a, b /. DedupeRules[a[[2]], b[[2]]]], rest]; *)
-ETensorDot[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], rest___] := With[{
-    rep = DedupeRules[inds1, inds2]
-}, ETensorDot[
-    ETensorDot0[ETensor[expr1, inds1], ETensor[ReplaceIndex[expr2, rep], inds2 /. rep]],
-    rest
-]];
-
-ETensorDot[left___, Zero, right___] = Zero;
-ETensorDot[ETensor[expr_, inds_], x_?IndexedScalarQ, rest___] := ETensorDot[ETensor[expr * x, inds], rest];
-ETensorDot[x_?IndexedScalarQ, ETensor[expr_, inds_], rest___] := ETensorDot[ETensor[expr * x, inds], rest];
-
-ETensorDot[expr_ /; !MatchQ[expr, _List], l_List, rest___] := ETensorDot[expr, #, rest] & /@ l;
-ETensorDot[l_List, rest___] := ETensorDot[#, rest] & /@ l;
-
-ETensorDot[e_] := e;
-SyntaxInformation[ETensorDot] = {"ArgumentsPattern" -> {___}};
-Protect[ETensorDot];
 
 ETensorContractTwo0[expr1_, inds1_, expr2_, inds2_, n1_List, n2_List] := With[{
     a = inds1[[#]] & /@ n1,
