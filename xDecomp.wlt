@@ -1,4 +1,4 @@
-<< xDecomp`
+Needs["xTools`xDecomp`", "xDecomp.wl"];
 
 $DefInfoQ = False;
 
@@ -9,7 +9,17 @@ DefManifold[Mf, dimx + 2, IndexRangeNS[Mf`A, Mf`H]];
 DefManifold[Mx, dimx, IndexRangeNS[Mx`a, Mx`h]];
 DefMetric[NoSignDet, metricMf[-Mf`A, -Mf`B], CDMf];
 DefMetric[NoSignDet, metricMx[-Mx`a, -Mx`b], CDMx];
+
 DefGBasis[decomp, {{et[Mf`A], edt[-Mf`A], t}, {er[Mf`A], edr[-Mf`A], r}}, {eX[Mx`a, -Mf`A]}];
+DefTensor[n0[Mf`A], {Mf, r}];
+
+DefConstantSymbol[L0];
+DefParameter[r2];
+DefManifold[Mr, dimx, IndexRangeNS[Mr`a, Mr`h]];
+DefMetric[NoSignDet, metricMr[-Mr`a, -Mr`b], CDMr, OtherDependencies -> {r2}];
+DefGBasis[fgc, {{er2[Mf`A], edr2[-Mf`A], r2}}, {eR[Mr`a, -Mf`A]}];
+
+MUnit`BeginTestSection["Decomposing SSS metric ansatze"];
 
 metricVal = CreateGCTensor[{
     {-t, -t} -> -h[r],
@@ -22,11 +32,9 @@ metricInvVal = CreateGCTensor[{
     {r, r} -> f[r],
     {Mx`a, Mx`b} -> 1 / r^2 metricMx[Mx`a, Mx`b]
 }, {decomp, decomp}];
-
-MUnit`BeginTestSection["Decomposing SSS metric ansatze"];
-
 SetHeldMetric[covd1, metricMf, metricVal, metricInvVal];
 AddCurvatureTensorsToHolder[covd1, decomp, ChristoffelCDMf];
+
 VerificationTest[
     CachedGCTensor[covd1, RicciScalarCDMf, {}][],
     (1/(2 r^2 h[r]^2))(h[r] (2 h[
@@ -64,12 +72,87 @@ VerificationTest[
 
 MUnit`EndTestSection[];
 
+MUnit`BeginTestSection["Outer product"];
+
+covd1 /: HeldGCTensor[covd1, n0] = CreateGCTensor[{{r} -> Sqrt[f[r]]}, {decomp}];
+VerificationTest[
+    ETensor[(n0[Mf`A] n0[Mf`B] /. GetAllHeldTensorRules[covd1] // ContractGCTensors[covd1]) - CreateGCTensor[{{r, r} -> f[r]}, {decomp, decomp}][Mf`A, Mf`B], {Mf`A, Mf`B}] // ScreenDollarIndices
+,
+    CreateGCTensor[{}, {decomp, decomp}]
+];
+
+VerificationTest[
+    n0[Mf`A] n0[Mf`B] n0[-Mf`A] n0[-Mf`B] /. GetAllHeldTensorRules[covd1] // ContractGCTensors[covd1]
+,
+    1
+];
+
+MUnit`EndTestSection[];
+
+MUnit`BeginTestSection["FG expansion"];
+
+SetHeldMetric[fgcHolder, metricMf,
+    CreateGCTensor[{
+        {-r2, -r2} -> L0^2/(4 r2^2),
+        {-Mr`a, -Mr`b} -> 1/r2 metricMr[-Mr`a, -Mr`b]
+    }, -{fgc, fgc}],
+    CreateGCTensor[{
+        {r2, r2} -> (4 r2^2)/L0^2,
+        {Mr`a, Mr`b} -> r2 metricMr[Mr`a, Mr`b]
+    }, {fgc, fgc}]
+];
+AddCurvatureTensorsToHolder[fgcHolder, fgc, ChristoffelCDMf];
+GCTensorHolderDAUseMetricVB[fgcHolder] ^= None;
+
+fgEEom = ETensor[
+    RicciCDMf[-Mf`A, -Mf`B] + dimx / L0^2 metricMf[-Mf`A, -Mf`B]
+    /. GetAllHeldTensorRules[fgcHolder]
+    // ContractGCTensors[fgcHolder], {-Mf`A, -Mf`B}] // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify;
+fgEEomExpected = GCTensor[
+    {{1/4  metricMr[Mr`a, Mr`b] (metricMr[Mr`c, Mr`d]  ParamD[r2][metricMr[-Mr`a, -Mr`c]] ParamD[r2][metricMr[-Mr`b, -Mr`d]] - 2 ParamD[r2, r2][metricMr[-Mr`a, -Mr`b]]), 
+    ETensor[1/2  metricMr[Mr`b, Mr`c]  (-CDMr[-Mr`a][
+    ParamD[r2][metricMr[-Mr`b, -Mr`c]]] + CDMr[-Mr`c][
+    ParamD[r2][metricMr[-Mr`a, -Mr`b]]]), {-Mr`a}]}, 
+    {ETensor[1/2 metricMr[Mr`b, Mr`c]  (-CDMr[-Mr`a][
+    ParamD[r2][
+    metricMr[-Mr`b, -Mr`c]]] + CDMr[-Mr`c][
+    ParamD[r2][
+    metricMr[-Mr`a, -Mr`b]]]), {-Mr`a}], 
+    ETensor[(1/(
+        L0^2))(L0^2  RicciCDMr[-Mr`a, -Mr`b] + 
+        2 r2  metricMr[Mr`c, Mr`d]  ParamD[r2][
+    metricMr[-Mr`a, -Mr`c]] ParamD[r2][
+    metricMr[-Mr`b, -Mr`d]] + 
+        metricMr[-Mr`a, -Mr`b]   metricMr[Mr`c, Mr`d] 
+            ParamD[r2][
+    metricMr[-Mr`c, -Mr`d]] + ParamD[r2][
+    metricMr[-Mr`a, -Mr`b]] (-2 + 
+            dimx - r2  metricMr[Mr`c, Mr`d] 
+            ParamD[r2][
+    metricMr[-Mr`c, -Mr`d]]) - 
+        2 r2 ParamD[r2, r2][
+    metricMr[-Mr`a, -Mr`b]]), {-Mr`a, -Mr`b}]}}
+, {-fgc, -fgc}];
+
+VerificationTest[
+    Simplify@ToCanonical[fgEEom - fgEEomExpected, UseMetricOnVBundle -> None]
+,
+    CreateGCTensor[{}, -{fgc, fgc}]
+]
+
+MUnit`EndTestSection[];
+
 UndefGBasis@decomp;
+UndefGBasis@fgc;
+UndefTensor[n0];
 Undef /@ VisitorsOf@metricMf;
 Undef /@ VisitorsOf@metricMx;
-UndefMetric /@ {metricMx, metricMf};
+Undef /@ VisitorsOf@metricMr;
+UndefMetric /@ {metricMx, metricMf, metricMr};
 Undef /@ VisitorsOf@Mx;
 Undef /@ VisitorsOf@Mf;
-UndefManifold /@ {Mx, Mf};
-UndefConsantSymbol[dimx];
+Undef /@ VisitorsOf@Mr;
+UndefManifold /@ {Mx, Mf, Mr};
+UndefConstantSymbol[dimx];
+UndefConstantSymbol[L0];
 UndefParameter /@ {r, t};

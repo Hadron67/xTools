@@ -68,8 +68,6 @@ MetricInv::usage = "MetricInv is an option for SetCMetricRule that specifies the
 DefMetricNsd::usage = "DefMetricNsd[metric[-a, -b], covd, ...] calls DefMetric[1, metric[-a, -b], covd, ...] and then defines SignDetOfMetric[metric] as poison.";
 NoSignDet::usage = "NoSignDet can be used as the first argument of DefMetric to specify a metric with undefined signdet.";
 
-FastReplaceDummies::usage = "FastReplaceDummies[expr] is a faster implementation of ReplaceDummies[expr].";
-
 ETensor::usage = "ETensor[expr, {freeIndices}] represents an expression with dummy and free indices.";
 
 ETensorProduct::usage = "ETensorProduct[e1, e2, ...] computes the tensor outer product of ETensors e1, e2, ...";
@@ -87,6 +85,8 @@ ETensorContractTwo::usage = "ETensorContractTwo[T1, T2, {n1...}, {n2...}] contra
 ETensorRank::usage = "ETensorRank[ETensor[...]] gives the rank of the ETensor.";
 
 ToETensor::usage = "ToETensor[T] converts tensor head T to ETensor.";
+
+ZeroETensorQ::usage = "ZeroETensorQ[T] gives True of T is a zero tensor.";
 
 UniqueIndex::usage = "UniqueIndex[a] gets a unique and temporary a-index of the form a$*.";
 
@@ -461,12 +461,6 @@ NoSignDet /: DefMetric[NoSignDet, metric_[inds___], args___] := (
 );
 Protect[NoSignDet];
 
-FastReplaceDummies[expr_] := With[{
-    rep = # -> UniqueIndex@# & /@ Union[List @@ UpIndex /@ FindDummyIndices[expr]]
-}, expr /. rep];
-SyntaxInformation[FastReplaceDummies] = {"ArgumentsPattern" -> {_}};
-Protect[FastReplaceDummies];
-
 SameIndexUDQ[a_Symbol, b_Symbol] = True;
 SameIndexUDQ[-a_Symbol, -b_Symbol] = True;
 SameIndexUDQ[_, _] = False;
@@ -485,17 +479,15 @@ ETensor[expr_, inds_List][inds2__] /; Length@inds === Length@{inds2} := Module[
     {indPairs, matchedInds, unmatchedInds, unmatchedDummies, deltas},
     indPairs = Thread@{inds, {inds2}};
     matchedInds = Select[indPairs, SameIndexUDQ[#[[1]], #[[2]]] &];
-    unmatchedInds = Select[indPairs, !SameIndexUDQ[#[[1]], #[[2]]] &];
-    unmatchedDummies = UniqueIndex[UpIndex[#[[1]]]] & /@ unmatchedInds;
-    unmatchedInds = Append[#1, #2] & @@@ Transpose@{unmatchedInds, unmatchedDummies};
-    deltas = Times @@ (delta[ChangeIndex[CopyIndexSign[#1, #3]], #2] & @@@ unmatchedInds);
-    (FastReplaceDummies[expr] /. (UpIndex[#1] -> #3 & @@@ unmatchedInds))*deltas /. (#1 -> #2 & @@@ matchedInds)
+    unmatchedInds = Append[#, UniqueIndex@#[[1]]] & /@ Select[indPairs, !SameIndexUDQ[#[[1]], #[[2]]] &];
+    deltas = Times @@ (delta[ChangeIndex[#3], #2] & @@@ unmatchedInds);
+    (ReplaceDummies[expr] // ReplaceIndex[#, #1 -> #3 & @@@ unmatchedInds] &)*deltas // ReplaceIndex[#, #1 -> #2 & @@@ matchedInds] &
 ];
 ETensor /:
     ETensor[expr1_, inds1_List] + ETensor[expr2_, inds2_List] /; CompatibleIndexListsQ[inds1, inds2] := (
         ETensor[
-            FastReplaceDummies[expr1]
-            + (FastReplaceDummies[expr2] /. Thread[inds2 -> inds1])
+            ReplaceDummies[expr1]
+            + (ReplaceDummies[expr2] // ReplaceIndex[#, Thread[inds2 -> inds1]] &)
         , inds1]
     );
 ETensor /: Times[ETensor[expr_, inds_], factors__] := (
@@ -507,6 +499,7 @@ ETensor /: Simplification[ETensor[expr_, args__], opt___] := ETensor[Simplificat
 ETensor /: Simplify[ETensor[expr_, args__], opt___] := ETensor[Simplify[expr, opt], args];
 ETensor /: ContractMetric[ETensor[expr_, inds_], args___] := ETensor[ContractMetric[expr, args], inds];
 ETensor /: ParamD[params__][ETensor[expr_, args__]] := ETensor[ParamD[params][expr], args];
+ETensor /: NoScalar[ETensor[expr_, inds_]] := ETensor[NoScalar@expr, inds];
 ETensor /: FindFreeIndices[ETensor[_, inds_]] := IndexList @@ inds;
 ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
     {dollars, rep},
@@ -521,7 +514,9 @@ Protect[ETensor];
 
 DedupeRules[inds1_, inds2_] := With[{
     dupes = Intersection[UpIndex /@ inds1, UpIndex /@ inds2]
-}, If[Length@dupes > 0, Thread[dupes -> (UniqueIndex /@ dupes)], {}]];
+}, With[{
+    inds2d = Select[inds2, MemberQ[dupes, UpIndex@#] &]
+}, Thread[inds2d -> (UniqueIndex /@ inds2d)]]];
 
 IndexedScalarQ[_ETensor | _List] = False;
 IndexedScalarQ[_] = True;
@@ -530,7 +525,7 @@ ETensorProduct[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], rest___] := Wit
     rep = DedupeRules[inds1, inds2]
 },
     ETensorProduct[
-        ETensor[FastReplaceDummies[expr1] * (FastReplaceDummies[expr2] /. rep), Join[inds1, inds2 /. rep]],
+        ETensor[ReplaceDummies[expr1] * ReplaceIndex[Evaluate@ReplaceDummies[expr2], rep], Join[inds1, inds2 /. rep]],
         rest
     ]
 ];
@@ -547,10 +542,16 @@ Protect[ETensorProduct];
 ETensorDot0[ETensor[expr1_, {left___, a_}], ETensor[expr2_, {b_, right___}]] := With[{
     bi = UniqueIndex@b
 },
-    ETensor[FastReplaceDummies[expr1] * (FastReplaceDummies[expr2] /. b -> bi) * delta[ChangeIndex@a, ChangeIndex@bi], {left, right}]
+    ETensor[ReplaceDummies[expr1] * ReplaceIndex[ReplaceDummies[expr2], {b -> bi}] * delta[ChangeIndex@a, ChangeIndex@bi], {left, right}]
 ];
 
-ETensorDot[a_ETensor, b_ETensor, rest___] := ETensorDot[ETensorDot0[a, b /. DedupeRules[a[[2]], b[[2]]]], rest];
+(* ETensorDot[a_ETensor, b_ETensor, rest___] := ETensorDot[ETensorDot0[a, b /. DedupeRules[a[[2]], b[[2]]]], rest]; *)
+ETensorDot[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], rest___] := With[{
+    rep = DedupeRules[inds1, inds2]
+}, ETensorDot[
+    ETensorDot0[ETensor[expr1, inds1], ETensor[ReplaceIndex[expr2, rep], inds2 /. rep]],
+    rest
+]];
 
 ETensorDot[left___, Zero, right___] = Zero;
 ETensorDot[ETensor[expr_, inds_], x_?IndexedScalarQ, rest___] := ETensorDot[ETensor[expr * x, inds], rest];
@@ -567,12 +568,12 @@ ETensorContractTwo0[expr1_, inds1_, expr2_, inds2_, n1_List, n2_List] := With[{
     a = inds1[[#]] & /@ n1,
     b = inds2[[#]] & /@ n2
 },  With[{bi = UniqueIndex /@ b},
-    ETensor[FastReplaceDummies[expr1] * (FastReplaceDummies[expr2] /. Thread[b -> bi]) * (Times @@ (delta[ChangeIndex@#1, ChangeIndex@#2] & @@@ Thread@{a, bi})), Join[Delete[inds1, Transpose@{n1}], Delete[inds2, Transpose@{n2}]]]
+    ETensor[ReplaceDummies[expr1] * ReplaceIndex[ReplaceDummies[expr2], Thread[b -> bi]] * (Times @@ (delta[ChangeIndex@#1, ChangeIndex@#2] & @@@ Thread@{a, bi})), Join[Delete[inds1, Transpose@{n1}], Delete[inds2, Transpose@{n2}]]]
 ]];
 
 ETensorContractTwo[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], n1_, n2_] := With[{
     rep = DedupeRules[inds1, inds2]
-}, ETensorContractTwo0[expr1, inds1, expr2 /. rep, inds2 /. rep, n1, n2]];
+}, ETensorContractTwo0[expr1, inds1, ReplaceIndex[expr2, rep], inds2 /. rep, n1, n2]];
 ETensorContractTwo[a_, b_, n_Integer] := ETensorContractTwo[a, b, Range[-n, -1], Range@n];
 ETensorContractTwo[ETensor[expr_, inds_], x_?IndexedScalarQ, {}, {}] := ETensor[expr * x, inds];
 ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[expr * x, inds];
@@ -595,6 +596,11 @@ ToETensor[t_?xTensorQ, indsSign_List] := With[{
 }, ETensor[t @@ inds, inds]] /; Length@SlotsOfTensor@t === Length@indsSign;
 SyntaxInformation[ToETensor] = {"ArgumentsPattern" -> {_, _.}};
 Protect[ToETensor];
+
+ZeroETensorQ[ETensor[0, _]] = True;
+ZeroETensorQ[_] = False;
+SyntaxInformation[ZeroETensorQ] = {"ArgumentsPattern" -> {_}};
+Protect[ZeroETensorQ];
 
 ETensorTranspose[ETensor[expr_, inds_], perms_] := ETensor[expr, Permute[inds, perms]];
 ETensorTranspose[expr_, {}] := expr;

@@ -1,4 +1,4 @@
-<< xTension`;
+Needs["xTools`xTension`", "xTension.wl"];
 $DefInfoQ = False;
 
 DefConstantSymbol[dimx];
@@ -11,6 +11,7 @@ DefConstantSymbol[Lt];
 DefConstantSymbol[Lambda0];
 DefMetric[1, metricMX[-MX`a, -MX`b], CDMX, OtherDependencies -> {r}, PrintAs -> "g", SymbolOfCovD -> {";", "\[Del]"}];
 DefMetric[1, metricMF[-MF`A, -MF`B], CDMF, OtherDependencies -> {r}, PrintAs -> "g", SymbolOfCovD -> {";", "D"}];
+DefTensor[V0[MF`A], MF];
 
 DefCoordinateParameter[TangentMF -> TangentMR, r, eMR, edMR];
 
@@ -64,29 +65,45 @@ MUnit`EndTestSection[];
 MUnit`BeginTestSection["ETensor"];
 
 VerificationTest[
-    ETensor[metricMF[-MF`A, -MF`B]][MF`A, -MF`A],
+    ETensor[metricMF[-MF`A, -MF`B]][MF`A, -MF`A]
+,
     dimx + 1
 ];
 
 VerificationTest[
-    ETensor[metricMF[-MF`A, -MF`B]] - ETensor[metricMF[-MF`C, -MF`D]],
+    ETensor[metricMF[-MF`A, -MF`B]] - ETensor[metricMF[-MF`C, -MF`D]]
+,
     ETensor[0, {-MF`A, -MF`B}]
 ];
 
 VerificationTest[
     ETensorProduct[ETensor[metricMF[-MF`A, -MF`B]], ETensor[metricMF[-MF`A, MF`B]]]
-    - ETensor[metricMF[-MF`A, -MF`B] delta[-MF`C, MF`D], {-MF`A, -MF`B, -MF`C, MF`D}] // #[-MF`A, -MF`B, -MF`C, MF`D] &,
+    - ETensor[metricMF[-MF`A, -MF`B] delta[-MF`C, MF`D], {-MF`A, -MF`B, -MF`C, MF`D}] // #[-MF`A, -MF`B, -MF`C, MF`D] &
+,
     0
 ];
 
 MUnit`EndTestSection[];
 
-UndefTensor /@ {eMR, edMR};
+MUnit`BeginTestSection["ETensor product with Scalar inside"];
+
+VerificationTest[
+    ETensorProduct[
+        ETensor[Scalar[V0[MF`A] V0[-MF`A]] V0[MF`A], {MF`A}],
+        ETensor[Scalar[V0[MF`A] V0[-MF`A]] V0[-MF`A], {-MF`A}]
+    ] - ETensor[Scalar[V0[MF`A] V0[-MF`A]]^2 V0[MF`A] V0[-MF`B], {MF`A, -MF`B}] // ZeroETensorQ
+];
+
+MUnit`EndTestSection[];
+
+UndefTensor /@ {eMR, edMR, V0};
 Undef /@ VisitorsOf@metricMX;
 Undef /@ VisitorsOf@metricMF;
 UndefMetric[metricMX];
 UndefMetric[metricMF];
 Undef /@ VisitorsOf@MX;
-UndefConstantSymbol /@ {L0, Lt, Lambda0, dimx};
+Undef /@ VisitorsOf@MR;
+Undef /@ VisitorsOf@MF;
 UndefManifold /@ {MF, MR, MX};
+UndefConstantSymbol /@ {L0, Lt, Lambda0, dimx};
 UndefParameter[r];
