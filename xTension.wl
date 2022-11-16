@@ -1,6 +1,6 @@
 BeginPackage["xTools`xTension`", {"xAct`xCore`", "xAct`xTensor`", "xAct`xPerm`", "xAct`SymManipulator`"}];
 
-(Unprotect[#]; Remove[#];) & /@ Names@{"xTools`xTension`*", "xTools`xTension`Private`*"};
+(Unprotect[#]; Remove[#];) & /@ Names@{$Context <> "*", $Context <> "Private`*"};
 
 ToCanonicalN::usage = "Calls ToCanonical with UseMetricOnVBundle -> None.";
 SimplificationN::usage = "Calls Simplification[] using Implode.";
@@ -92,8 +92,6 @@ IndexRangeNS::usage = "IndexRangeNS[ns`a, ns`p] is similiar to IndexRange[a, p] 
 
 EulerDensityP::usage = "EulerDensityP[riem, D] gives the D dimension Euler density with Riemann tensor riem. Similar to xAct`xTras`EulerDensity except it does not multiply SigDet[metric].";
 
-Protect[OtherRules, MetricInv];
-
 Begin["`Private`"];
 
 (* metric decomposition *)
@@ -128,7 +126,6 @@ SyntaxInformation[DualBasisOfCoordinateParameter] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[CoordinateParameterOfVBundle] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[VBundleOfCoordinateParameter] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[CoordinateBasisQ] = {"ArgumentsPattern" -> {_}};
-Protect[BasisOfCoordinateParameter, DualBasisOfCoordinateParameter, CoordinateParameterOfVBundle, VBundleOfCoordinateParameter, CoordinateBasisQ];
 
 DefCoordinateParameter::nsvb = "`1` is not a subvbundle of `2`";
 DefCoordinateParameter[parentVB_?VBundleQ -> vb_?VBundleQ, param_?ParameterQ, e_, ed_] := Module[
@@ -164,12 +161,10 @@ DefCoordinateParameter[parentVB_?VBundleQ -> vb_?VBundleQ, param_?ParameterQ, e_
 SyntaxInformation[DefCoordinateParameter] = {"ArgumentsPattern" -> {_, _, _, _}};
 DropCoordinateBasis[expr_] := expr /. _?CoordinateBasisQ[_] -> 1;
 SyntaxInformation[DropCoordinateBasis] = {"ArgumentsPattern" -> {_}};
-Protect[DefCoordinateParameter, DropCoordinateBasis];
 
 CoordinateParameterQ[p_] := BasisOfCoordinateParameter[p] =!= Null;
 CoordinateParameterOfIndex[i_] := CoordinateParameterOfVBundle@VBundleOfIndex@UpIndex@i;
 CoordinateIndexQ[i_] := AIndexQ[i] && CoordinateParameterOfIndex@i =!= Null;
-Protect[CoordinateParameterQ, CoordinateParameterOfIndex, CoordinateIndexQ];
 
 Unprotect[PD, ParamD];
 PD[-a_Symbol?CoordinateIndexQ][A_] := With[
@@ -177,7 +172,6 @@ PD[-a_Symbol?CoordinateIndexQ][A_] := With[
     ParamD[param][A] DualBasisOfCoordinateParameter[param][-a]
 ];
 ParamD[p_Symbol?CoordinateParameterQ]@PD[-a_Symbol]@A_ := PD[-a]@ParamD[p]@A;
-Protect[PD, ParamD];
 
 DecomposedIndicesList[ids_, vb_] := Module[
     {l, sp},
@@ -196,7 +190,6 @@ Protect@SplitAllIndices;
 
 ToCanonicalN[expr_, opt___] := ToCanonical[expr, UseMetricOnVBundle -> None, opt];
 SimplificationN[expr_] := Implode[expr, ParamD] // Simplification // Explode;
-Protect[ToCanonicalN, SimplificationN];
 
 CalculateDecomposed[expr_, vb_, calc_, calc2_] := Module[
     {freeInds, indsMap, vals, lhs},
@@ -224,7 +217,6 @@ CalculateDecomposedChristoffel[cd_] := Module[
     ]
 ];
 SyntaxInformation[CalculateDecomposedChristoffel] = {"ArgumentsPattern" -> {_}};
-Protect[SelectNonFlatCD, CalculateDecomposedChristoffel];
 
 ChristoffelToRiemann[cd_][expr_] := ChristoffelToRiemann[expr, cd];
 ChristoffelToRiemann[expr_, cd_] := Module[
@@ -297,7 +289,6 @@ SyntaxInformation[DecomposedChristoffelRules] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[DecomposedRiemannRules] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[DecomposedRicciRules] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[DecomposedRicciScalarRule] = {"ArgumentsPattern" -> {_}};
-Protect[DecomposedChristoffelRules, DecomposedRiemannRules, DecomposedRicciRules, DecomposedRicciScalarRule];
 AllDecomposedRules[cd_] := Flatten@{
     DecomposedChristoffelRules[cd],
     DecomposedRiemannRules[cd],
@@ -312,7 +303,6 @@ ClearDecomposedCache[cd_] := (
 );
 SyntaxInformation[AllDecomposedRules] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[ClearDecomposedCache] = {"ArgumentsPattern" -> {_}};
-Protect[AllDecomposedRules, ClearDecomposedCache];
 
 ToDecomposed[cd_][expr_] := ToDecomposed[expr, cd];
 ToDecomposed[expr_List, cd_] := ToDecomposed[#, cd] & /@ expr;
@@ -406,7 +396,6 @@ UndefRiemannVarD[cd_] := With[{
     RicciScalarCD /: VarD[RiemannCD[inds__], cd2_][RicciScalarCD[], rest_] =.;
 ];
 SyntaxInformation[UndefRiemannVarD] = {"ArgumentsPattern" -> {_}};
-Protect[DefRiemannVarD, UndefRiemannVarD];
 
 Options[SetCMetricRule] = {MetricInv -> None};
 SetCMetricRule[metric_, cmetric_, opt: OptionsPattern[]] := With[{
@@ -450,14 +439,12 @@ DefMetricNsd[metric_[inds___], covd_, args___] := (
     SignDetOfMetric[metric] ^:= Throw@Message[DefMetricNsd::nosigndet, metric];
 );
 SyntaxInformation[DefMetricNsd] = {"ArgumentsPattern" -> {_, _, ___}};
-Protect[DefMetricNsd];
 
 NoSignDet::nsd = "SignDetOfMetric[`1`] is not defined.";
 NoSignDet /: DefMetric[NoSignDet, metric_[inds___], args___] := (
     DefMetric[1, metric[inds], args];
     SignDetOfMetric[metric] ^:= Throw@Message[NoSignDet::nsd, metric];
 );
-Protect[NoSignDet];
 
 SameIndexUDQ[a_Symbol, b_Symbol] = True;
 SameIndexUDQ[-a_Symbol, -b_Symbol] = True;
@@ -508,7 +495,6 @@ ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
 ETensor /: ChangeCovD[ETensor[expr_, inds_], args___] := ETensor[ChangeCovD[expr, args], inds];
 
 SyntaxInformation[ETensor] = {"ArgumentsPattern" -> {_, _.}};
-Protect[ETensor];
 
 DedupeRules[inds1_, inds2_] := With[{
     dupes = Intersection[UpIndex /@ inds1, UpIndex /@ inds2]
@@ -535,7 +521,6 @@ ETensorProduct[ETensor[expr_, inds_], x_?IndexedScalarQ, rest___] := ETensorProd
 ETensorProduct[x_?IndexedScalarQ, ETensor[expr_, inds_], rest___] := ETensorProduct[ETensor[expr * x, inds], rest];
 ETensorProduct[x_?IndexedScalarQ, y_?IndexedScalarQ, rest___] := x*y*If[Length@{rest} === 0, 1, ETensorProduct[rest]];
 SyntaxInformation[ETensorProduct] = {"ArgumentsPattern" -> {___}};
-Protect[ETensorProduct];
 
 ETensorContractTwo0[expr1_, inds1_, expr2_, inds2_, n1_List, n2_List] := With[{
     a = inds1[[#]] & /@ n1,
@@ -552,12 +537,10 @@ ETensorContractTwo[ETensor[expr_, inds_], x_?IndexedScalarQ, {}, {}] := ETensor[
 ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[expr * x, inds];
 ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}, {}] := x * y;
 SyntaxInformation[ETensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _}};
-Protect[ETensorContractTwo];
 
 ETensorRank[ETensor[_, inds_]] := Length@inds;
 ETensorRank[_] = 0;
 SyntaxInformation[ETensorRank] = {"ArgumentsPattern" -> {_}};
-Protect[ETensorRank];
 
 GetIndicesFromUpDownVBundle[vb_Symbol?VBundleQ, count_, exclude_] := GetIndicesOfVBundle[vb, count, exclude];
 GetIndicesFromUpDownVBundle[-vb_Symbol?VBundleQ, count_, exclude_] := -GetIndicesOfVBundle[vb, count, exclude];
@@ -568,12 +551,11 @@ ToETensor[t_?xTensorQ, indsSign_List] := With[{
     inds = Fold[Join[#1, GetIndicesOfVBundle[#2, 1, Union[UpIndex /@ #1]]] &, {}, SlotsOfTensor@t] * indsSign
 }, ETensor[t @@ inds, inds]] /; Length@SlotsOfTensor@t === Length@indsSign;
 SyntaxInformation[ToETensor] = {"ArgumentsPattern" -> {_, _.}};
-Protect[ToETensor];
 
 ZeroETensorQ[ETensor[0, _]] = True;
+ZeroETensorQ[0] = True;
 ZeroETensorQ[_] = False;
 SyntaxInformation[ZeroETensorQ] = {"ArgumentsPattern" -> {_}};
-Protect[ZeroETensorQ];
 
 ETensorTranspose[ETensor[expr_, inds_], perms_] := ETensor[expr, Permute[inds, perms]];
 ETensorTranspose[expr_, {}] := expr;
@@ -582,7 +564,6 @@ ETensorTranspose[0, _] = 0;
 ETensorTranspose[Zero, _] = Zero;
 ETensorTranspose[expr_Plus, perms_] := ETensorTranspose[#, perms] /@ expr;
 SyntaxInformation[ETensorTranspose] = {"ArgumentsPattern" -> {_, _}};
-Protect[ETensorTranspose];
 
 ETensorPD[vb_][expr_] := ETensorPD[expr, vb];
 ETensorPD[x_?IndexedScalarQ, vb_] := With[{
@@ -592,14 +573,12 @@ ETensorPD[ETensor[expr_, inds_], vb_] := With[{
     ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
 }, ETensor[PD[-ai]@expr, Prepend[inds, -ai]]];
 SyntaxInformation[ETensorPD] = {"ArgumentsPattern" -> {_, _}};
-Protect[ETensorPD];
 
 ZeroETensor[{}] = 0;
 ZeroETensor[vbs_] := ETensor[0, Fold[With[{
     ind = GetIndicesOfVBundle[#2, 1, UpIndex /@ #1]
 }, Join[#1, If[MatchQ[#2, _Symbol], ind, -ind]]] &, {}, vbs]];
 SyntaxInformation[ZeroETensor] = {"ArgumentsPattern" -> {_}};
-Protect[ZeroETensor];
 
 IndexRangeNS::nsne = "Symbols have different namespaces `1` and `2`.";
 IndexRangeNS[a_Symbol, p_Symbol] := With[{
@@ -609,7 +588,6 @@ IndexRangeNS[a_Symbol, p_Symbol] := With[{
 }, Symbol[ns <> #] & /@ CharacterRange[a0, p0]] /; Context@a === Context@p;
 IndexRangeNS[a_Symbol, p_Symbol] := Throw@Message[IndexRangeNS::nsne, Context@a, Context@p] /; Context@a =!= Context@p;
 SyntaxInformation[IndexRangeNS] = {"ArgumentsPattern" -> {_, _}};
-Protect[IndexRangeNS];
 
 EulerDensityP[riem_, dim_?EvenQ] := With[{
     inds = GetIndicesOfVBundle[-First@SlotsOfTensor@riem, 2dim],
@@ -623,8 +601,9 @@ EulerDensityP[riem_, dim_?EvenQ] := With[{
     ]]
 ]];
 SyntaxInformation[EulerDensityP] = {"ArgumentsPattern" -> {_, _}};
-Protect[EulerDensityP];
 
 End[];
+
+Protect @@ Names[$Context <> "*"];
 
 EndPackage[];

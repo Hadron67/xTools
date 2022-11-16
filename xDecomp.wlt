@@ -142,6 +142,25 @@ VerificationTest[
 
 MUnit`EndTestSection[];
 
+MUnit`BeginTestSection["ZeroGCTensorQ"];
+
+VerificationTest[ZeroGCTensorQ@CreateGCTensor[{}, -{fgc, fgc, fgc}]];
+
+MUnit`EndTestSection[];
+
+MUnit`BeginTestSection["PostETensorContract"];
+
+VerificationTest[
+    GCTensorContractTwo[CreateGCTensor[{
+        {-Mx`a, -Mx`b} -> metricMx[-Mx`a, -Mx`b] + metricMx[-Mx`b, -Mx`a]
+    }, -{decomp, decomp}], CreateGCTensor[{
+        {Mx`a, Mx`b} -> metricMx[Mx`a, Mx`b] + metricMx[Mx`b, Mx`a]
+    }, {decomp, decomp}], {1}, {1}, PostETensorContract -> ContractMetric]
+    - CreateGCTensor[{{-Mx`a, Mx`b} -> 4 delta[-Mx`a, Mx`b]}, {-decomp, decomp}] // ZeroGCTensorQ
+];
+
+MUnit`EndTestSection[];
+
 UndefGBasis@decomp;
 UndefGBasis@fgc;
 UndefTensor[n0];
