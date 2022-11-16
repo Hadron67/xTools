@@ -35,6 +35,8 @@ metricInvVal = CreateGCTensor[{
 SetHeldMetric[covd1, metricMf, metricVal, metricInvVal];
 AddCurvatureTensorsToHolder[covd1, decomp, ChristoffelCDMf];
 
+Print[CachedGCTensor[covd1, ChristoffelCDMf, {1, -1, -1}]];
+
 VerificationTest[
     CachedGCTensor[covd1, RicciScalarCDMf, {}][],
     (1/(2 r^2 h[r]^2))(h[r] (2 h[

@@ -1,9 +1,10 @@
 BeginPackage["xTools`Misc`"];
 
-(Unprotect[#]; Remove[#];) & /@ Names@{$Context <> "*", $Context <> "Private`*"};
+(Unprotect[#]; ClearAll[#];) & /@ Names@{$Context <> "*", $Context <> "Private`*"};
 
 FVariation::usage = "FVariation[expr, order] computes the functional variation.";
 ConstantFunctions::usage = "ConstantFunctions is an option of FVariation that specifies constant functions.";
+ConstantxTensors::usage = "ConstantxTensors is an option of FVariation that specifies constant tensors from xAct.";
 
 Begin["`Private`"];
 
@@ -11,6 +12,19 @@ Options[FVariation] = {ConstantFunctions -> {}};
 FVariation[expr_] := FVariation[expr, 1];
 FVariation[expr_, 0, opt___] := expr;
 FVariation[expr_Plus, order_, opt___] := FVariation[#, order, opt] & /@ expr;
+FVariation[expr_List, order_, opt___] := FVariation[#, order, opt] & /@ expr;
+FVariation[xTools`xTension`ETensor[expr_, inds_], order_, opt___] := xTools`xTension`ETensor[
+    FVariation[expr, order, opt],
+    inds
+];
+FVariation[xTools`xDecomp`GCTensor[arr_, basis_], order_, opt___] := xTools`xDecomp`GCTensor[
+    Map[FVariation[#, order, opt] &, arr, {Length@basis}],
+    basis
+];
+FVariation[xTools`xDecomp`GCTensor[arr_, basis_][inds__], order_, opt___] := xTools`xDecomp`GCTensor[
+    Map[FVariation[#, order, opt] &, arr, {Length@basis}],
+    basis
+][inds];
 FVariation[expr_Times, order_Integer /; order >= 1, opt___] := FVariation[
     Plus @@ MapIndexed[FVariation[#, 1, opt]*Delete[expr, #2[[1]]] &, List @@ expr],
     order - 1,

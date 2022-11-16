@@ -1,6 +1,6 @@
 BeginPackage["xTools`xDecomp`", {"xAct`xCore`", "xAct`xTensor`", "xTools`xTension`"}];
 
-(Unprotect[#]; Remove[#];) & /@ Names@{$Context <> "*", $Context <> "Private`*"};
+(Unprotect[#]; ClearAll[#];) & /@ Names@{$Context <> "*", $Context <> "Private`*"};
 
 GChartQ::usage = "GChartQ[chart] gives True if chart is a generalized chart.";
 CoordsOfGChart::usage = "CoordsOfGChart[chart] gives single-variable coordinate list of the generalized chart, each element is in the form {e, ed, param}."
@@ -56,8 +56,8 @@ ContractGCTensors::usage = "ContractGCTensors[expr, covd] performs contractions 
 ValidateGCTensor::usage = "ValidateGCTensor[GCTensor[...]] fixes some ";
 ZeroGCTensor::usage = "ZeroGCTensor[charts] creats a GCTensor with zero components.";
 CreateGCTensor::usage = "CreateGCTensor[{{r1, r2, ...} -> expr}, charts] is a convenient function for creating GCTensors.";
-GCTensorPD::usage = "GCTensorPD[expr, chart] calculates the partial derivative of the tensor expression in chart.";
-GCTensorCovD::usage = "GCTensorCovD[expr, ]";
+GCTensorPDGrad::usage = "GCTensorPDGrad[expr, chart] calculates the partial derivative of the tensor expression in chart.";
+
 
 RecoverSubRiemannTensors::usage = "RecoverSubRiemannTensors[GCTensor[..., {-c1, -c2, -c3, -c4}]] replaces Christoffel tensors of sub manifolds with Riemann tensors.";
 
@@ -318,7 +318,7 @@ ClearGCTensorHolderCache[holder_] := With[{
 }, (holder /: CachedGCTensor[holder, #1, #2] =.) & @@@ t;];
 SyntaxInformation[ClearGCTensorHolderCache] = {"ArgumentsPattern" -> {_}};
 
-PDGChart[chart_?GChartQ, -a_Symbol][t_GCTensor[inds__]] := GCTensorPD[t, chart][-a, inds];
+PDGChart[chart_?GChartQ, -a_Symbol][t_GCTensor[inds__]] := GCTensorPDGrad[t, chart][inds, -a];
 SyntaxInformation[PDGChart] = {"ArgumentsPattern" -> {_, _}};
 
 ExpandPDToBasis[chart_?GChartQ][expr_] := ExpandPDToBasis[expr, chart];
@@ -589,6 +589,9 @@ DefGCTensorMapFunc[funcs__] := Function[func,
 ] /@ {funcs};
 
 DefGCTensorMapFunc[
+    D,
+    Dt,
+    Simplify,
     ScreenDollarIndices,
     ToCanonical,
     NoScalar,
@@ -644,7 +647,7 @@ AddGCTensorElement[params_, subVBundles_][arr_, spec_List -> expr_] := Module[
     ainds = MapThread[If[#2 > 0, #1, Nothing] &, {spec, inds - clens}];
     With[{
         ainds2 = List @@ FindFreeIndices@expr
-    }, If[ainds =!= ainds2, Throw@Message[CreateGCTensor::unmatched, ainds, ainds2]]];
+    }, If[Sort@ainds =!= Sort@ainds2, Throw@Message[CreateGCTensor::unmatched, ainds, ainds2]]];
     elem = If[Length@ainds > 0, ETensor[expr, ainds], expr];
     ReplacePart[arr, inds -> elem]
 ];
@@ -663,29 +666,27 @@ CreateGCTensor[{components___}, charts_] := Module[
 ];
 SyntaxInformation[CreateGCTensor] = {"ArgumentsPattern" -> {_, _}};
 
-GCTensorPD[chart_][expr_] := GCTensorPD[expr, chart];
-GCTensorPD[expr_Plus, chart_] := GCTensorPD[chart] /@ expr;
-GCTensorPD[GCTensor[arr_, basis_], chart_] := With[{
-    paramds = ParamD[#[[3]]] & /@ CoordsOfGChart@chart,
-    subvbs = ETensorPD@First@SlotsOfTensor@# & /@ SubManifoldsOfGChart@chart,
+GCTensorPDGrad[chart_][expr_] := GCTensorPDGrad[expr, chart];
+GCTensorPDGrad[expr_Plus, chart_] := GCTensorPDGrad[chart] /@ expr;
+GCTensorPDGrad[GCTensor[arr_, basis_], chart_] := With[{
+    ops = Join[
+        ParamD[#[[3]]] & /@ CoordsOfGChart@chart,
+        ETensorPDGrad@First@SlotsOfTensor@# & /@ SubManifoldsOfGChart@chart
+    ],
     len = Length@basis
 },
-    GCTensor[Join[
-        Map[#, arr, {len}] & /@ paramds,
-        Map[#, arr, {len}] & /@ subvbs
-    ], Prepend[basis, -chart]]
+    GCTensor[Map[Function[elem, #@elem & /@ ops], arr, {len}], Append[basis, -chart]]
 ];
-GCTensorPD[scalar_, chart_] := With[{
-    paramds = ParamD[#[[3]]] & /@ CoordsOfGChart@chart,
-    subvbs = ETensorPD@First@SlotsOfTensor@# & /@ SubManifoldsOfGChart@chart,
+GCTensorPDGrad[scalar_, chart_] := With[{
+    ops = Join[
+        ParamD[#[[3]]] & /@ CoordsOfGChart@chart,
+        ETensorPDGrad@First@SlotsOfTensor@# & /@ SubManifoldsOfGChart@chart
+    ],
     len = Length@basis
 },
-    GCTensor[Join[
-        #@scalar & /@ paramds,
-        #@scalar & /@ subvbs
-    ], {-chart}]
+    GCTensor[#@scalar & /@ ops, {-chart}]
 ];
-SyntaxInformation[GCTensorPD] = {"ArgumentsPattern" -> {_, _.}};
+SyntaxInformation[GCTensorPDGrad] = {"ArgumentsPattern" -> {_, _.}};
 
 ContractTwoIndexedGCTensors[t1_GCTensor[inds1__], t2_GCTensor[inds2__], opt___] := Module[
     {pairs, pos1, pos2, res},

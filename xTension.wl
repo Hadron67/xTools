@@ -1,6 +1,6 @@
 BeginPackage["xTools`xTension`", {"xAct`xCore`", "xAct`xTensor`", "xAct`xPerm`", "xAct`SymManipulator`"}];
 
-(Unprotect[#]; Remove[#];) & /@ Names@{$Context <> "*", $Context <> "Private`*"};
+(Unprotect[#]; ClearAll[#];) & /@ Names@{$Context <> "*", $Context <> "Private`*"};
 
 ToCanonicalN::usage = "Calls ToCanonical with UseMetricOnVBundle -> None.";
 SimplificationN::usage = "Calls Simplification[] using Implode.";
@@ -74,7 +74,7 @@ ETensorProduct::usage = "ETensorProduct[e1, e2, ...] computes the tensor outer p
 
 ETensorTranspose::usage = "ETensorTranspose[ETensor[...], perms] performs the transpose of the ETensor.";
 
-ETensorPD::usage = "ETensorPD[T, vb] or ETensorPD[vb][T] adds a PD to the ETensor.";
+ETensorPDGrad::usage = "ETensorPDGrad[T, vb] or ETensorPDGrad[vb][T] adds a PD to the ETensor.";
 
 ZeroETensor::usage = "ZeroETensor[vbs] creates a zero ETensor.";
 
@@ -479,10 +479,19 @@ ETensor /: Times[ETensor[expr_, inds_], factors__] := (
     If[Cases[{factors}, _ETensor], Message[ETensor::invldmlt]];
     ETensor[Times[expr, factors], inds]
 );
-ETensor /: ToCanonical[ETensor[expr_, args__], opt___] := ETensor[ToCanonical[expr, opt], args];
-ETensor /: Simplification[ETensor[expr_, args__], opt___] := ETensor[Simplification[expr, opt], args];
-ETensor /: Simplify[ETensor[expr_, args__], opt___] := ETensor[Simplify[expr, opt], args];
-ETensor /: ContractMetric[ETensor[expr_, inds_], args___] := ETensor[ContractMetric[expr, args], inds];
+
+DefETensorMapFunc[funcs__] := Function[func,
+    ETensor /: func[ETensor[expr_, inds_], args___] := ETensor[func[expr, args], inds];
+] /@ {funcs};
+DefETensorMapFunc[
+    D,
+    Dt,
+    ToCanonical,
+    Simplification,
+    Simplify,
+    ContractMetric,
+    NoScalar
+];
 ETensor /: ParamD[params__][ETensor[expr_, args__]] := ETensor[ParamD[params][expr], args];
 ETensor /: NoScalar[ETensor[expr_, inds_]] := ETensor[NoScalar@expr, inds];
 ETensor /: FindFreeIndices[ETensor[_, inds_]] := IndexList @@ inds;
@@ -565,14 +574,14 @@ ETensorTranspose[Zero, _] = Zero;
 ETensorTranspose[expr_Plus, perms_] := ETensorTranspose[#, perms] /@ expr;
 SyntaxInformation[ETensorTranspose] = {"ArgumentsPattern" -> {_, _}};
 
-ETensorPD[vb_][expr_] := ETensorPD[expr, vb];
-ETensorPD[x_?IndexedScalarQ, vb_] := With[{
+ETensorPDGrad[vb_][expr_] := ETensorPDGrad[expr, vb];
+ETensorPDGrad[x_?IndexedScalarQ, vb_] := With[{
     ai = First@GetIndicesOfVBundle[vb, 1]
 }, ETensor[PD[-ai]@x, {-ai}]];
-ETensorPD[ETensor[expr_, inds_], vb_] := With[{
+ETensorPDGrad[ETensor[expr_, inds_], vb_] := With[{
     ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
-}, ETensor[PD[-ai]@expr, Prepend[inds, -ai]]];
-SyntaxInformation[ETensorPD] = {"ArgumentsPattern" -> {_, _}};
+}, ETensor[PD[-ai]@expr, Append[inds, -ai]]];
+SyntaxInformation[ETensorPDGrad] = {"ArgumentsPattern" -> {_, _}};
 
 ZeroETensor[{}] = 0;
 ZeroETensor[vbs_] := ETensor[0, Fold[With[{
