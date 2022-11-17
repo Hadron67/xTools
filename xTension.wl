@@ -69,27 +69,19 @@ DefMetricNsd::usage = "DefMetricNsd[metric[-a, -b], covd, ...] calls DefMetric[1
 NoSignDet::usage = "NoSignDet can be used as the first argument of DefMetric to specify a metric with undefined signdet.";
 
 ETensor::usage = "ETensor[expr, {freeIndices}] represents an expression with dummy and free indices.";
-
 ETensorProduct::usage = "ETensorProduct[e1, e2, ...] computes the tensor outer product of ETensors e1, e2, ...";
-
 ETensorTranspose::usage = "ETensorTranspose[ETensor[...], perms] performs the transpose of the ETensor.";
-
 ETensorPDGrad::usage = "ETensorPDGrad[T, vb] or ETensorPDGrad[vb][T] adds a PD to the ETensor.";
+ETensorPDDiv::usage = "ETensorPDDiv[T, axis] contracts the PD operator with the specfied axis.";
 
 ZeroETensor::usage = "ZeroETensor[vbs] creates a zero ETensor.";
-
+ETensorContract::usage = "ETensorContract[T, n1, n2] contracts n1 axis with n2 of T.";
 ETensorContractTwo::usage = "ETensorContractTwo[T1, T2, {n1...}, {n2...}] contracts the n1... axes of T1 to n2.. axes of T2.";
-
 ETensorRank::usage = "ETensorRank[ETensor[...]] gives the rank of the ETensor.";
-
 ToETensor::usage = "ToETensor[T] converts tensor head T to ETensor.";
-
 ZeroETensorQ::usage = "ZeroETensorQ[T] gives True of T is a zero tensor.";
-
 UniqueIndex::usage = "UniqueIndex[a] gets a unique and temporary a-index of the form a$*.";
-
 IndexRangeNS::usage = "IndexRangeNS[ns`a, ns`p] is similiar to IndexRange[a, p] except the returned indices are prefixed with namespace ns`.";
-
 EulerDensityP::usage = "EulerDensityP[riem, D] gives the D dimension Euler density with Riemann tensor riem. Similar to xAct`xTras`EulerDensity except it does not multiply SigDet[metric].";
 
 Begin["`Private`"];
@@ -547,6 +539,17 @@ ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[
 ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}, {}] := x * y;
 SyntaxInformation[ETensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _}};
 
+SignOfAIndex[a_Symbol] = 1;
+SignOfAIndex[-a_Symbol] = -1;
+ETensorContract[ETensor[expr_, inds_], n1_, n2_] := With[{
+    a1 = inds[[n1]],
+    a2 = inds[[n2]]
+}, ETensor[If[SignOfAIndex[a1] != SignOfAIndex[a2],
+    ReplaceIndex[expr, {a1 -> ChangeIndex@a2}],
+    With[{ai = UniqueIndex@a1}, ReplaceIndex[expr, {a1 -> ai}] delta[ChangeIndex@a2, ChangeIndex@ai]]
+], Delete[inds, {{n1}, {n2}}]]];
+SyntaxInformation[ETensorContract] = {"ArgumentsPattern" -> {_, _, _}};
+
 ETensorRank[ETensor[_, inds_]] := Length@inds;
 ETensorRank[_] = 0;
 SyntaxInformation[ETensorRank] = {"ArgumentsPattern" -> {_}};
@@ -582,6 +585,15 @@ ETensorPDGrad[ETensor[expr_, inds_], vb_] := With[{
     ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
 }, ETensor[PD[-ai]@expr, Append[inds, -ai]]];
 SyntaxInformation[ETensorPDGrad] = {"ArgumentsPattern" -> {_, _}};
+
+ETensorPDDiv::iind = "Cannot contract index `1` with the derivative operator.";
+ETensorPDDiv[ETensor[expr_, inds_], n_Integer] := With[{
+    ai = inds[[n]]
+},
+    If[!MatchQ[ai, _Symbol], Throw@Message[ETensorPDDiv::iind, ai]];
+    ETensor[PD[-ai]@expr, Delete[inds, n]]
+];
+SyntaxInformation[ETensorPDDiv] = {"ArgumentsPattern" -> {_, _}};
 
 ZeroETensor[{}] = 0;
 ZeroETensor[vbs_] := ETensor[0, Fold[With[{
