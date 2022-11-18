@@ -25,6 +25,7 @@ GCTensorHolderQ::usage = "GCTensorHolderQ[covd] gives True for GCovD.";
 SetHeldMetric::usage = "SetHeldMetric[holder, metric, metric, invMetric] sets the metric of the holder.";
 AddCurvatureTensorsToHolder::usage = "AddCurvatureTensorsToHolder[holder, chart, christoffelTensor] defines curvature tensors to the holder, using the given Christoffel tensor.";
 SortGChartParamD::usage = "SortGChartParamD[expr, chart] or SortGChartParamD[chart][expr] makes all coordinate ParamDs of chart in expr insider PDs.";
+CovDOfGCTensorHolder::usage = "CovDOfGCTensorHolder[holder, metric] returns the CovD operator (CovDGChart) from the metric defined in holder.";
 
 HeldGCTensor::usage = "HeldGCTensor[holder, tensor] gives the tensor provider of the tensor.";
 CachedGCTensor::usage = "CachedGCTensor[holder, tensor, inds] gives the cached tensor with specific risen/lowered indices.";
@@ -35,8 +36,8 @@ GCTensorHolderDAUseMetricVB::usage = "GCTensorHolderDAUseMetricVB[holder] is the
 PostCurvatureTensorCalculation::usage = "PostCurvatureTensorCalculation[tensor] is an action tag for GCTensorHolderAction that's executed after the calculation of every curvature related tensors.";
 PostChangeIndex::usage = "PostChangeIndex[tensor, indices, changedInd] is an action tag for GCTensorHolderAction that's executed after changing index for a cached tensor.";
 
-PDGChart::usage = "PDGChart[chart, -a] represents the PD operator of the GChart chart.";
-CovDGChart::usage = "CovDGChart[chart, chris, -a] represents the CovD operator of the chart with Christoffel tensor chris.";
+PDGChart::usage = "PDGChart[chart] represents the PD operator of the GChart chart.";
+CovDGChart::usage = "CovDGChart[chart, chris] represents the CovD operator of the chart with Christoffel tensor chris.";
 ExpandPDToBasis::usage = "ExpandPDToBasis[expr, chart] or ExpandPDToBasis[chart][expr] expands all partial derivatives in expr in terms of basis the coordinates and sub manifolds of chart.";
 ExpandMetric::usage = "ExpandMetric[expr, chart] or ExpandMetric[chart][expr] replaces all metric in expr with the decomposed one defined in chart."
 ExpandPDToGCTensor::usage = "ExpandPDToGCTensor[expr, chart] or ExpandPDToGCTensor[chart][expr] replaces all PDs to GCTensors in expr.";
@@ -341,6 +342,9 @@ SortGChartParamD[expr_, chart_] := With[{
 }, expr //. rules];
 SyntaxInformation[SortGChartParamD] = {"ArgumentsPattern" -> {_, _.}};
 
+(* CovDOfGCTensorHolder[holder_, metric_] := ;
+SyntaxInformation[CovDOfGCTensorHolder] = {"ArgumentsPattern" -> {_, _}}; *)
+
 GetAllHeldTensors[holder_] := Union[
     Replace[#[[1]], {
         HoldPattern[Verbatim[HoldPattern][CachedGCTensor[holder, t_, _]]] :> t,
@@ -361,12 +365,14 @@ ClearGCTensorHolderCache[holder_] := With[{
 }, (holder /: CachedGCTensor[holder, #1, #2] =.) & @@@ t;];
 SyntaxInformation[ClearGCTensorHolderCache] = {"ArgumentsPattern" -> {_}};
 
-PDGChart[-chart_?GChartQ, -a_Symbol][t_GCTensor[l___, a_Symbol, r___]] := GCTensorPDDiv[t, Length@{l} + 1, -chart][l, r];
-PDGChart[-chart_?GChartQ, -a_Symbol][t_GCTensor[inds__]] := GCTensorPDGrad[t, -chart][inds, -a] /; !MemberQ[{inds}, a];
-CovDGChart[-chart_?GChartQ, chris_, -a_Symbol][t_GCTensor[l___, a_Symbol, r___]] := GCTensorCovDDiv[t, Length@{l} + 1, -chart, chris][l, r];
-CovDGChart[-chart_?GChartQ, chris_, -a_Symbol][t_GCTensor[inds__]] := GCTensorCovDGrad[t, -chart, chris][inds, -a] /; !MemberQ[{inds}, a];
-SyntaxInformation[PDGChart] = {"ArgumentsPattern" -> {_, _}};
-SyntaxInformation[PDGChart] = {"ArgumentsPattern" -> {_, _, _}};
+PDGChart[-chart_?GChartQ][-a_Symbol][t_GCTensor[l___, a_Symbol, r___]] := GCTensorPDDiv[t, Length@{l} + 1, -chart][l, r];
+PDGChart[-chart_?GChartQ][a_Symbol][t_GCTensor[l___, -a_Symbol, r___]] := GCTensorPDDiv[t, Length@{l} + 1, -chart][l, r];
+PDGChart[-chart_?GChartQ][-a_Symbol][t_GCTensor[inds__]] := GCTensorPDGrad[t, -chart][inds, -a] /; !MemberQ[{inds}, a];
+CovDGChart[-chart_?GChartQ, chris_][-a_Symbol][t_GCTensor[l___, a_Symbol, r___]] := GCTensorCovDDiv[t, Length@{l} + 1, -chart, chris][l, r];
+CovDGChart[-chart_?GChartQ, chris_][a_Symbol][t_GCTensor[l___, -a_Symbol, r___]] := GCTensorCovDDiv[t, Length@{l} + 1, -chart, chris][l, r];
+CovDGChart[-chart_?GChartQ, chris_][-a_Symbol][t_GCTensor[inds__]] := GCTensorCovDGrad[t, -chart, chris][inds, -a] /; !MemberQ[{inds}, a];
+SyntaxInformation[PDGChart] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[CovDGChart] = {"ArgumentsPattern" -> {_, _}};
 
 ExpandPDToBasis[chart_?GChartQ][expr_] := ExpandPDToBasis[expr, chart];
 ExpandPDToBasis[expr_, chart_?GChartQ] := Module[
@@ -387,8 +393,8 @@ SyntaxInformation[ExpandPDToBasis] = {"ArgumentsPattern" -> {_, _.}};
 
 ExpandPDToGCTensor[chart_][expr_] := ExpandPDToGCTensor[expr, chart];
 ExpandPDToGCTensor[expr_, chart_?GChartQ] := With[{
-    Q = Symbol[ToString[VBundleOfGChart@chart] <> "`Q"]
-}, expr /. PD[-a_Symbol?Q] -> PDGChart[-chart, -a]];
+    pmQ = Symbol[ToString[VBundleOfGChart@chart] <> "`pmQ"]
+}, expr /. PD[a_?pmQ] -> PDGChart[-chart][a]];
 SyntaxInformation[ExpandPDToGCTensor] = {"ArgumentsPattern" -> {_, _.}};
 
 ExpandMetric[chart_?GChartQ][expr_] := ExpandMetric[expr, chart];
@@ -800,22 +806,29 @@ GCTensorCovDGrad[expr: GCTensor[arr_, basis_], -chart_?GChartQ, chris_] := With[
         ]
     ] &, basis]
 ];
-SyntaxInformation[GCTensorPDDiv] = {"GCTensorCovDGrad" -> {_, _, _}};
+SyntaxInformation[GCTensorCovDGrad] = {"ArgumentsPattern" -> {_, _, _}};
 
 GCTensorCovDDiv[expr: GCTensor[arr_, basis_], n_, -chart_?GChartQ, chris_] := With[{
     pd = GCTensorPDDiv[expr, n, -chart],
-    chris2 = GCTensorContract[chris, {1}, {2}]
+    chris2 = GCTensorContract[chris, {1}, {2}],
+    len = Length@basis
 },
-    pd + Total@MapIndexed[With[{n2 = #2[[1]]}, Which[
+    pd + Total@MapIndexed[With[{n2 = #2[[1]], cp = If[#2[[1]] > n, 1, 0]}, Which[
         n == n2,
         GCTensorContractTwo[expr, chris2, {n2}, {1}],
         GChartQ[#1],
-        GCTensorContractTwo[expr, chris, {n2, n}, {3, 2}],
+        GCTensorTranspose[
+            GCTensorContractTwo[expr, chris, {n2, n}, {3, 2}],
+            MoveTo[len - 1, n2 - cp]
+        ],
         True,
-        GCTensorContractTwo[-expr, chris, {n2, n}, {1, 2}]
+        GCTensorTranspose[
+            GCTensorContractTwo[-expr, chris, {n2, n}, {1, 2}],
+            MoveTo[len - 1, n2 - cp]
+        ]
     ]] &, basis]
 ];
-SyntaxInformation[GCTensorCovDDiv] = {"GCTensorCovDGrad" -> {_, _, _, _}};
+SyntaxInformation[GCTensorCovDDiv] = {"ArgumentsPattern" -> {_, _, _, _}};
 
 ContractTwoIndexedGCTensors[t1_GCTensor[inds1__], t2_GCTensor[inds2__], opt___] := Module[
     {pairs, pos1, pos2, res},

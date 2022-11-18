@@ -6,5 +6,5 @@ If[result["AllTestsSucceeded"],
     Print["All tests passed."]
 ,
     failed = result["TestsFailed"];
-    Print[failed /. Removed[name_] :> Symbol["Global`" <> name]];
+    Print[failed /. Removed[name_] :> name];
 ];
