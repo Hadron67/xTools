@@ -5,6 +5,8 @@ BeginPackage["xTools`xTension`", {"xAct`xCore`", "xAct`xTensor`", "xAct`xPerm`",
 ToCanonicalN::usage = "Calls ToCanonical with UseMetricOnVBundle -> None.";
 SimplificationN::usage = "Calls Simplification[] using Implode.";
 
+ErrorMarker::usage = "ErrorMarker[expr] is used to indicate an error input expr.";
+
 MakeDecomposedRules::usage = "MakeDecomposedRules[tensor[inds], values] generates rules by splitting all indices into subvbundles.";
 
 SetDecomposedRules::usage = "SetDecomposedRules[tensor[inds], values] sets the generated decomposed rules to tensor.";
@@ -541,13 +543,16 @@ SyntaxInformation[ETensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _}};
 
 SignOfAIndex[a_Symbol] = 1;
 SignOfAIndex[-a_Symbol] = -1;
-ETensorContract[ETensor[expr_, inds_], n1_, n2_] := With[{
+ETensorContract[ETensor[expr_, inds_], n1_List, n2_List] := With[{
     a1 = inds[[n1]],
     a2 = inds[[n2]]
-}, ETensor[If[SignOfAIndex[a1] != SignOfAIndex[a2],
-    ReplaceIndex[expr, {a1 -> ChangeIndex@a2}],
-    With[{ai = UniqueIndex@a1}, ReplaceIndex[expr, {a1 -> ai}] delta[ChangeIndex@a2, ChangeIndex@ai]]
-], Delete[inds, {{n1}, {n2}}]]];
+}, With[{a2i = UniqueIndex /@ a2},
+    ETensor[
+        ReplaceIndex[expr, Thread[a2 -> a2i]] * (Times @@ MapThread[delta[ChangeIndex@#1, ChangeIndex@#2] &, {a1, a2i}]),
+        Delete[inds, Transpose@{Join[n1, n2]}]
+    ]
+]];
+ETensorContract[e_, {}, {}] := e;
 SyntaxInformation[ETensorContract] = {"ArgumentsPattern" -> {_, _, _}};
 
 ETensorRank[ETensor[_, inds_]] := Length@inds;
@@ -587,11 +592,12 @@ ETensorPDGrad[ETensor[expr_, inds_], vb_] := With[{
 SyntaxInformation[ETensorPDGrad] = {"ArgumentsPattern" -> {_, _}};
 
 ETensorPDDiv::iind = "Cannot contract index `1` with the derivative operator.";
+ETensorPDDiv[n_][expr_] := ETensorPDDiv[expr, n];
 ETensorPDDiv[ETensor[expr_, inds_], n_Integer] := With[{
-    ai = inds[[n]]
+    a1 = inds[[n]]
 },
-    If[!MatchQ[ai, _Symbol], Throw@Message[ETensorPDDiv::iind, ai]];
-    ETensor[PD[-ai]@expr, Delete[inds, n]]
+    If[!UpIndexQ@a1, Throw@Message[ETensorPDDiv::iind, ai]];
+    ETensor[PD[-a1]@expr, Delete[inds, n]]
 ];
 SyntaxInformation[ETensorPDDiv] = {"ArgumentsPattern" -> {_, _}};
 

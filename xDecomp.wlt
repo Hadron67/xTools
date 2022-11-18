@@ -12,6 +12,7 @@ DefMetric[NoSignDet, metricMx[-Mx`a, -Mx`b], CDMx];
 
 DefGBasis[decomp, {{et[Mf`A], edt[-Mf`A], t}, {er[Mf`A], edr[-Mf`A], r}}, {eX[Mx`a, -Mf`A]}];
 DefTensor[n0[Mf`A], {Mf, r}];
+DefTensor[v0[Mx`a], {Mx, r}];
 
 DefConstantSymbol[L0];
 DefParameter[r2];
@@ -161,9 +162,61 @@ VerificationTest[
 
 MUnit`EndTestSection[];
 
+MUnit`BeginTestSection["Covariant derivatives"];
+
+v1 = CreateGCTensor[{
+    {t} -> h[t, r],
+    {r} -> f[t, r],
+    {Mx`a} -> v0[Mx`a]
+}, {decomp}];
+
+t1 = CreateGCTensor[{
+    {t, -t} -> h[t, r],
+    {r, -r} -> f[t, r],
+    {Mx`a, -Mx`b} -> v0[Mx`a] v0[-Mx`b]
+}, {decomp, -decomp}];
+
+chris = CachedGCTensor[covd1, ChristoffelCDMf, {1, -1, -1}];
+
+VerificationTest[
+    GCTensorPDDiv[v1, 1][] // NoScalar // ScreenDollarIndices
+,
+    D[f[t, r], r] + D[h[t, r], t] + PD[-Mx`a][v0[Mx`a]]
+];
+
+VerificationTest[
+    0 == GCTensorCovDDiv[v1, 1, -decomp, chris][] - ContractGCTensors[
+        PDGChart[-decomp, -Mf`A][v1[Mf`A]] + chris[Mf`B, -Mf`B, -Mf`A] v1[Mf`A]
+    ,
+        covd1
+    ] // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] &
+];
+
+VerificationTest[
+    GCTensorCovDDiv[t1, 1, -decomp, chris] - ETensor[ContractGCTensors[
+        PDGChart[-decomp, -Mf`B][t1[Mf`B, -Mf`A]]
+        + chris[Mf`B, -Mf`B, -Mf`C] t1[Mf`C, -Mf`A]
+        - chris[Mf`C, -Mf`B, -Mf`A] t1[Mf`B, -Mf`C]
+    ,
+        covd1
+    ], {-Mf`A}] // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // ZeroGCTensorQ
+];
+
+VerificationTest[
+    GCTensorCovDGrad[t1, -decomp, chris] - ETensor[ContractGCTensors[
+        PDGChart[-decomp, -Mf`C][t1[Mf`A, -Mf`B]]
+        + chris[Mf`A, -Mf`C, -Mf`D] t1[Mf`D, -Mf`B]
+        - chris[Mf`D, -Mf`C, -Mf`B] t1[Mf`A, -Mf`D]
+    ,
+        covd1
+    ], {Mf`A, -Mf`B, -Mf`C}] // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // ZeroGCTensorQ
+];
+
+MUnit`EndTestSection[];
+
 UndefGBasis@decomp;
 UndefGBasis@fgc;
-UndefTensor[n0];
+UndefTensor /@ {n0, v0};
 Undef /@ VisitorsOf@metricMf;
 Undef /@ VisitorsOf@metricMx;
 Undef /@ VisitorsOf@metricMr;
