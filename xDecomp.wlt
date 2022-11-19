@@ -253,6 +253,17 @@ VerificationTest[
 
 MUnit`EndTestSection[];
 
+MUnit`BeginTestSection["DeltaGCTensor"];
+
+VerificationTest[
+    With[{
+        delta01 = DeltaGCTensor[decomp, {1, -1}],
+        delta02 = CreateGCTensor[{{r, -r} -> 1, {t, -t} -> 1, {Mx`a, -Mx`b} -> delta[Mx`a, -Mx`b]}, {decomp, -decomp}]
+    }, Print[delta01]; ZeroGCTensorQ[delta01 - delta02 // ToCanonical]]
+];
+
+MUnit`EndTestSection[];
+
 UndefGBasis@decomp;
 UndefGBasis@fgc;
 UndefTensor /@ {n0, v0};

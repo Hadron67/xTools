@@ -1,6 +1,6 @@
 BeginPackage["xTools`xTension`", {"xAct`xCore`", "xAct`xTensor`", "xAct`xPerm`", "xAct`SymManipulator`"}];
 
-(Unprotect[#]; ClearAll[#];) & /@ Names@{$Context <> "*", $Context <> "Private`*"};
+(Unprotect[#]; ClearAll[#];) & /@ Names@{"`*", "`Private`*"};
 
 ToCanonicalN::usage = "Calls ToCanonical with UseMetricOnVBundle -> None.";
 SimplificationN::usage = "Calls Simplification[] using Implode.";
@@ -483,6 +483,8 @@ DefETensorMapFunc[
     ToCanonical,
     Simplification,
     Simplify,
+    Factor,
+    Together,
     ContractMetric,
     NoScalar
 ];
@@ -631,6 +633,6 @@ SyntaxInformation[EulerDensityP] = {"ArgumentsPattern" -> {_, _}};
 
 End[];
 
-Protect @@ Names[$Context <> "*"];
+Protect @@ Names["`*"];
 
 EndPackage[];
