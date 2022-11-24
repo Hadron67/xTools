@@ -48,23 +48,15 @@ ClearDecomposedCache::usage = "ClearDecomposedCache[cd] clears all decomposed ca
 ToDecomposed::usage = "ToDecomposed[expr, cd] or ToDecomposed[cd][expr] convert expr into decomposed forms of lists using rules AllDecomposedRules[cd].";
 
 ReplaceIndicesRules::usage = "ReplaceIndicesRules[expr, fromVB, toVB, opt] returns a list of rules that replaces all indices of fromVB in expr to toVB.";
-
 ReplaceCovDs::usage = "ReplaceCovDs[expr, cdFrom, cdTo, opt] replaces all indices and associated tensors (curvatures, etc) of cdFrom in expr with that of cdTo.";
-
 DefRiemannVarD::usage = "DefRiemannVarD[cd] defines rules that makes VarD[Riemann[cd]][expr] work for expr containing Ricci tensors.";
-
 UndefRiemannVarD::usage = "UndefRiemannVarD[cd] removes rules defined by DefRiemannVarD[cd]";
-
-SetCMetricRule::usage = "SetCMetricRule[metric, cmetric] defines component rules for metric using CTensor metric cmetric.";
-
-UnsetCMetricRule::usage = "UnsetCMetricRule[metric] removes all rules defined by SetCMetricRule[metric, ...].";
-
-WithCMetricRule::usage = "WithCMetricRule[expr_, metric_, cmetric_] evaluates expr by calling SetCMetricRule[metric, cmetric] first. It's also an option for ReplaceCovDs determining whether wrap the whole expression with WithCMetricRule or not.";
-
 BHTemperature::usage = "BHTemperature[gtt, grr, gxx, r, r0] calculates the Hawking temperature of black hole with radial coordinate r and metric components gtt, grr, gxx, and horizon r0.";
 
+SetCMetricRule::usage = "SetCMetricRule[metric, cmetric] defines component rules for metric using CTensor metric cmetric.";
+WithCMetricRule::usage = "WithCMetricRule[expr_, metric_, cmetric_] evaluates expr by calling SetCMetricRule[metric, cmetric] first. It's also an option for ReplaceCovDs determining whether wrap the whole expression with WithCMetricRule or not.";
+UnsetCMetricRule::usage = "UnsetCMetricRule[metric] removes all rules defined by SetCMetricRule[metric, ...].";
 OtherRules::usage = "OtherRules is an option for ReplaceIndicesRules and ReplaceCovDs that defines other rules to be applied.";
-
 MetricInv::usage = "MetricInv is an option for SetCMetricRule that specifies the inverse metric explicitly.";
 
 DefMetricNsd::usage = "DefMetricNsd[metric[-a, -b], covd, ...] calls DefMetric[1, metric[-a, -b], covd, ...] and then defines SignDetOfMetric[metric] as poison.";
@@ -85,6 +77,7 @@ ZeroETensorQ::usage = "ZeroETensorQ[T] gives True of T is a zero tensor.";
 UniqueIndex::usage = "UniqueIndex[a] gets a unique and temporary a-index of the form a$*.";
 IndexRangeNS::usage = "IndexRangeNS[ns`a, ns`p] is similiar to IndexRange[a, p] except the returned indices are prefixed with namespace ns`.";
 EulerDensityP::usage = "EulerDensityP[riem, D] gives the D dimension Euler density with Riemann tensor riem. Similar to xAct`xTras`EulerDensity except it does not multiply SigDet[metric].";
+RiemannScalarList::usage = "RiemannScalarList[riem, n] gives a list of all possible scalars constructed from the Riemann tensor riem. RiemannScalarList[None, n] returns a list where Riemann tensors are represented by List.";
 
 Begin["`Private`"];
 
@@ -104,11 +97,9 @@ MakeDecomposedRules[tensor_[inds__], vals_] := Module[
     ret /. tensor2 -> tensor
 ];
 SyntaxInformation[MakeDecomposedRules] = {"ArgumentsPattern" -> {_, _}};
-Protect@MakeDecomposedRules;
 
 SetDecomposedRules[tensor_[inds__], vals_] := (#1 := #2) & @@@ MakeDecomposedRules[tensor[inds], vals];
 SyntaxInformation[SetDecomposedRules] = {"ArgumentsPattern" -> {_, _}};
-Protect@SetDecomposedRules;
 
 BasisOfCoordinateParameter[_] = Null;
 DualBasisOfCoordinateParameter[_] = Null;
@@ -173,14 +164,11 @@ DecomposedIndicesList[ids_, vb_] := Module[
     sp = List @@ First@SplittingsOfVBundle@vb;
     #1 -> IndexList @@ If[MatchQ[#1, _Symbol], #2, -#2] & @@@ Transpose@{l, Transpose[GetIndicesOfVBundle[#, Length@l] & /@ sp]}
 ];
-Protect@DecomposedIndicesList;
 ScalarTraceProductDummy[expr_] := expr /. Scalar[e_] :> Scalar@TraceProductDummy@e;
-Protect@ScalarTraceProductDummy;
 SplitAllIndices[l_List, vb_] := SplitAllIndices[#, vb] & /@ l;
 SplitAllIndices[expr_, vb_] := expr // SplitIndex[#, DecomposedIndicesList[FindFreeIndices@#, vb]] & // ScalarTraceProductDummy // TraceProductDummy;
 SplitAllIndices[vb_][expr_] := SplitAllIndices[expr, vb];
 SyntaxInformation[SplitAllIndices] = {"ArgumentsPattern" -> {_, _.}};
-Protect@SplitAllIndices;
 
 ToCanonicalN[expr_, opt___] := ToCanonical[expr, UseMetricOnVBundle -> None, opt];
 SimplificationN[expr_] := Implode[expr, ParamD] // Simplification // Explode;
@@ -193,7 +181,6 @@ CalculateDecomposed[expr_, vb_, calc_, calc2_] := Module[
     lhs = expr // SplitIndex[#, indsMap] & // Flatten;
     Flatten[MakeRule[#, MetricOn -> None] & /@ Transpose@{lhs, vals}]
 ];
-Protect@CalculateDecomposed;
 
 SelectNonFlatCD[vbs_] := Select[CovDOfMetric /@ Select[Union @@ MetricsOfVBundle /@ vbs, !FlatMetricQ[#] &], v |-> v =!= Null];
 CalculateDecomposedChristoffel[cd_] := Module[
@@ -226,7 +213,6 @@ ChristoffelToRiemann[expr_, cd_] := Module[
     ((expr /. rule) + expr) / 2
 ];
 SyntaxInformation[ChristoffelToRiemann] = {"ArgumentsPattern" -> {_, _.}};
-Protect@ChristoffelToRiemann;
 
 CalculateDecomposedRiemann[cd_, chrisRules_] := Module[
     {metric, vb, sp, cds, a, b, c, d},
@@ -248,7 +234,6 @@ CalculateDecomposedRiemann[cd_, chrisRules_] := Module[
     ]
 ];
 SyntaxInformation[CalculateDecomposedRiemann] = {"ArgumentsPattern" -> {_, _}};
-Protect@CalculateDecomposedRiemann;
 
 CalculateDecomposedRicci[cd_, riemannRules_] := Module[
     {metric, riemann, ricci, a, b, c, d},
@@ -259,7 +244,6 @@ CalculateDecomposedRicci[cd_, riemannRules_] := Module[
     CalculateDecomposed[ricci[-a, -b], VBundleOfMetric@metric, riemann[-a, -c, -b, -d] metric[c, d] &, e |-> e /. riemannRules]
 ];
 SyntaxInformation[CalculateDecomposedRicci] = {"ArgumentsPattern" -> {_, _}};
-Protect@CalculateDecomposedRicci;
 
 CalculateDecomposedRicciScalar[cd_, ricciRules_] := Module[
     {metric, vb, a, b, ret},
@@ -273,7 +257,6 @@ CalculateDecomposedRicciScalar[cd_, ricciRules_] := Module[
     MakeRule[{Evaluate[RicciScalar[cd][]], Evaluate@Scalar@ret}, MetricOn -> None]
 ];
 SyntaxInformation[CalculateDecomposedRicciScalar] = {"ArgumentsPattern" -> {_, _}};
-Protect@CalculateDecomposedRicciScalar;
 
 DecomposedChristoffelRules[cd_] := DecomposedChristoffelRules[cd] ^= CalculateDecomposedChristoffel[cd];
 DecomposedRiemannRules[cd_] := DecomposedRiemannRules[cd] ^= CalculateDecomposedRiemann[cd, DecomposedChristoffelRules[cd]];
@@ -315,7 +298,6 @@ ToDecomposed[expr_, cd_] := Module[
         // Fold[ChangeCovD[#1, PD, #2] &, #, cds] &
 ];
 SyntaxInformation[ToDecomposed] = {"ArgumentsPattern" -> {_, _.}};
-Protect@ToDecomposed;
 
 Options[ReplaceIndicesRules] = {OtherRules -> {}};
 ReplaceIndicesRules::nsi = "index(ices) `1` not found in expression";
@@ -329,7 +311,6 @@ ReplaceIndicesRules[expr_, fromVB_, toVB_, opt: OptionsPattern[]] := Module[
     Join[extraRules, Thread[inds -> GetIndicesOfVBundle[toVB, Length@inds, #2 & @@@ extraRules]]]
 ];
 SyntaxInformation[ReplaceIndicesRules] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
-Protect@ReplaceIndicesRules;
 
 Options[ReplaceCovDs] = {OtherRules -> {}, WithCMetricRule -> False};
 ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] := With[{
@@ -358,7 +339,6 @@ ReplaceCovDs[expr_, cdFrom_, cdTo_, opt: OptionsPattern[]] := With[{
     }]
 ];
 SyntaxInformation[ReplaceCovDs] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
-Protect@ReplaceCovDs;
 
 DefRiemannVarD[cd_] := With[{
     metric = MetricOfCovD@cd,
@@ -399,14 +379,12 @@ SetCMetricRule[metric_, cmetric_, opt: OptionsPattern[]] := With[{
     metric[a_?UpIndexQ, b_?UpIndexQ] := inv[a, b];
 ];
 SyntaxInformation[SetCMetricRule] = {"ArgumentsPattern" -> {_, _, OptionsPattern[]}};
-Protect@SetCMetricRule;
 
 UnsetCMetricRule[metric_] := (
     metric[a_?DownIndexQ, b_?DownIndexQ] =.;
     metric[a_?UpIndexQ, b_?UpIndexQ] =.;
 );
 SyntaxInformation[UnsetCMetricRule] = {"ArgumentsPattern" -> {_}};
-Protect@UnsetCMetricRule;
 
 Options[WithCMetricRule] = Options[SetCMetricRule];
 WithCMetricRule[expr_, metric_, cmetric_, opt: OptionsPattern[]] := WithCleanup[
@@ -416,11 +394,9 @@ WithCMetricRule[expr_, metric_, cmetric_, opt: OptionsPattern[]] := WithCleanup[
 ];
 SetAttributes[WithCMetricRule, HoldFirst];
 SyntaxInformation[WithCMetricRule] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
-Protect@WithCMetricRule;
 
 BHTemperature[gtt_, grr_, gxx_, r_, r0_] := With[{fp = D[gtt/gxx, r], hp = D[1/grr, r]}, 1/(4 Pi) Sqrt[gxx fp hp] // Simplify // ReplaceAll[r -> r0]];
 SyntaxInformation[BHTemperature] = {"ArgumentsPattern" -> {_, _, _, _, _}};
-Protect@BHTemperature;
 
 DefineTensorSyntaxInformation[T_[inds___], deps_, sym_, opt: OptionsPattern[]] := (
     SyntaxInformation[T] = {"ArgumentsPattern" -> Array[_ &, Length@{inds}]};
@@ -630,6 +606,66 @@ EulerDensityP[riem_, dim_?EvenQ] := With[{
     ]]
 ]];
 SyntaxInformation[EulerDensityP] = {"ArgumentsPattern" -> {_, _}};
+
+RiemTermCanonicalQ[{None, None, None, None}] = True;
+RiemTermCanonicalQ[{_Integer, None, None, None}] = True;
+RiemTermCanonicalQ[{_Integer, None, _Integer, None}] = True;
+RiemTermCanonicalQ[{a_Integer, b_Integer, None, None}] := a != -b;
+RiemTermCanonicalQ[{a_Integer, b_Integer, c_Integer, None}] := a != -b && (a < 0 || b != -c);
+RiemTermCanonicalQ[{a_Integer, b_Integer, c_Integer, d_Integer}] := a != -b && c != -d;
+RiemTermCanonicalQ[_] = False;
+AtSlot12Or34Q[{n_Integer, 1}, {n_Integer, 2}] = True;
+AtSlot12Or34Q[{n_Integer, 2}, {n_Integer, 1}] = True;
+AtSlot12Or34Q[{n_Integer, 3}, {n_Integer, 4}] = True;
+AtSlot12Or34Q[{n_Integer, 4}, {n_Integer, 3}] = True;
+AtSlot12Or34Q[__] = False;
+ContainsMixedContractTermQ[{a_, b_, c_, d_}, list_] := (
+    (a != None && c != None && AtSlot12Or34Q[
+        FirstPosition[list, -a, None, {2}][[2]],
+        FirstPosition[list, -c, None, {2}][[2]]
+    ]) && (b != None && d != None && AtSlot12Or34Q[
+        FirstPosition[list, -b, None, {2}][[2]],
+        FirstPosition[list, -d, None, {2}][[2]]
+    ])
+);
+ContainsMixedContractTermQ[{a_, b_, c_, d_}, list_] := With[{
+    apos = FirstPosition[list, -a, None, {2}],
+    bpos = FirstPosition[list, -b, None, {2}],
+    cpos = FirstPosition[list, -c, None, {2}],
+    dpos = FirstPosition[list, -d, None, {2}]
+},
+    (a =!= None && c =!= None && AtSlot12Or34Q[apos, cpos])
+    || (b =!= None && d =!= None && AtSlot12Or34Q[bpos, dpos])
+    || (a =!= None && d =!= None && AtSlot12Or34Q[apos, dpos])
+    || (b =!= None && c =!= None && AtSlot12Or34Q[bpos, cpos])
+];
+MixedContractTermQ[list_] := Or @@ (ContainsMixedContractTermQ[#, list] & /@ list);
+RiemTermOuterLineCount[l_List] := With[{
+    l2 = DeleteCases[l, None]
+},
+    Length@Complement[l2, -l2]
+];
+RiemCanonicalQ[l_List] := And[
+    And @@ (RiemTermCanonicalQ /@ l),
+    OrderedQ[RiemTermOuterLineCount /@ l, GreaterEqual],
+    !MixedContractTermQ[l]
+];
+NextContractNum[{}] = 1;
+NextContractNum[l_List] := Max@l + 1;
+RiemAddContraction[list_] := With[{
+    n = NextContractNum@DeleteCases[Flatten@list, None],
+    np = Position[list, None, {2}]
+},
+    Select[
+        ReplacePart[list, {np[[1]] -> n, # -> -n}] & /@ np[[2 ;;]],
+        RiemCanonicalQ
+    ]
+];
+ActiveRiem[l_] := l /; FreeQ[l, None];
+RiemEnumerateContractions[n_] := {ActiveRiem[ConstantArray[None, {n, 4}]]} //. HoldPattern[ActiveRiem[l_]] :> (Sequence @@ (ActiveRiem /@ RiemAddContraction[l]));
+
+RiemannScalarList[None, n_] := RiemEnumerateContractions[n];
+SyntaxInformation[RiemannScalarList] = {"ArgumentsPattern" -> {_, _}};
 
 End[];
 
