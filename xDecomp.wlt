@@ -53,7 +53,6 @@ VerificationTest[
     (RiemannCDMf[-Mf`A, Mf`C, -Mf`B, Mf`D]
     * RiemannCDMf[-Mf`C, Mf`E, -Mf`D, Mf`F]
     * RiemannCDMf[-Mf`E, Mf`A, -Mf`F, Mf`B]
-    /. GetAllHeldTensorRules[holder1]
     // ContractGCTensors[holder1]
     // NoScalar
     // ContractMetric
@@ -81,13 +80,13 @@ MUnit`BeginTestSection["Outer product"];
 
 holder1 /: HeldGCTensor[holder1, n0] = CreateGCTensor[{{r} -> Sqrt[f[r]]}, {decomp}];
 VerificationTest[
-    ETensor[(n0[Mf`A] n0[Mf`B] /. GetAllHeldTensorRules[holder1] // ContractGCTensors[holder1]) - CreateGCTensor[{{r, r} -> f[r]}, {decomp, decomp}][Mf`A, Mf`B], {Mf`A, Mf`B}] // ScreenDollarIndices
+    ETensor[(n0[Mf`A] n0[Mf`B] // ContractGCTensors[holder1]) - CreateGCTensor[{{r, r} -> f[r]}, {decomp, decomp}][Mf`A, Mf`B], {Mf`A, Mf`B}] // ScreenDollarIndices
 ,
     CreateGCTensor[{}, {decomp, decomp}]
 ];
 
 VerificationTest[
-    n0[Mf`A] n0[Mf`B] n0[-Mf`A] n0[-Mf`B] /. GetAllHeldTensorRules[holder1] // ContractGCTensors[holder1]
+    n0[Mf`A] n0[Mf`B] n0[-Mf`A] n0[-Mf`B] // ContractGCTensors[holder1]
 ,
     1
 ];
@@ -111,7 +110,6 @@ GCTensorHolderDAUseMetricVB[fgcHolder] ^= None;
 
 fgEEom = ETensor[
     RicciCDMf[-Mf`A, -Mf`B] + dimx / L0^2 metricMf[-Mf`A, -Mf`B]
-    /. GetAllHeldTensorRules[fgcHolder]
     // ContractGCTensors[fgcHolder], {-Mf`A, -Mf`B}] // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify;
 fgEEomExpected = GCTensor[
     {{1/4  metricMr[Mr`a, Mr`b] (metricMr[Mr`c, Mr`d]  ParamD[r2][metricMr[-Mr`a, -Mr`c]] ParamD[r2][metricMr[-Mr`b, -Mr`d]] - 2 ParamD[r2, r2][metricMr[-Mr`a, -Mr`b]]), 
@@ -272,7 +270,7 @@ MUnit`BeginTestSection["Change GCTensor indices"];
 
 VerificationTest[
     With[{
-        t1 = ContractGCTensors[covd[-Mf`A]@covd[Mf`A]@phi0[], holder1] /. PD[_]@phi0[] -> 0 // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify,
+        t1 = ContractGCTensors[CDMf[-Mf`A]@CDMf[Mf`A]@phi0[], holder1] /. PD[_]@phi0[] -> 0 // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify,
         t2 = 1 / Sqrt[detg] (-ParamD[t][Sqrt[detg] 1/h[r] ParamD[t]@phi0[]] + ParamD[r][Sqrt[detg] f[r] ParamD[r]@phi0[]])
     },
         Simplify[t1 - t2] == 0
