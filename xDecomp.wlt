@@ -13,6 +13,7 @@ DefMetric[NoSignDet, metricMx[-Mx`a, -Mx`b], CDMx];
 DefGBasis[decomp, {{et[Mf`A], edt[-Mf`A], t}, {er[Mf`A], edr[-Mf`A], r}}, {eX[Mx`a, -Mf`A]}];
 DefTensor[n0[Mf`A], {Mf, r}];
 DefTensor[v0[Mx`a], {Mx, r}];
+DefTensor[phi0[], {Mf, r, t}];
 
 DefConstantSymbol[L0];
 DefParameter[r2];
@@ -33,6 +34,9 @@ metricInvVal = CreateGCTensor[{
     {r, r} -> f[r],
     {Mx`a, Mx`b} -> 1 / r^2 metricMx[Mx`a, Mx`b]
 }, {decomp, decomp}];
+
+detg = h[r] / f[r] r^(2dimx);
+
 SetHeldMetric[holder1, metricMf, metricVal, metricInvVal];
 AddCurvatureTensorsToHolder[holder1, decomp, ChristoffelCDMf];
 
@@ -212,8 +216,8 @@ VerificationTest[
 VerificationTest[
     0 == GCTensorCovDDiv[v1, 1, -decomp, chris][]
     - PDGChart[-decomp][-Mf`A][v1[Mf`A]]
-    - ContractGCTensors[chris[Mf`B, -Mf`B, -Mf`A] v1[Mf`A], holder1]
-    // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] &
+    - chris[Mf`B, -Mf`B, -Mf`A] v1[Mf`A]
+    // ContractGCTensors[#, holder1] & // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] &
 ];
 
 VerificationTest[
@@ -259,7 +263,20 @@ VerificationTest[
     With[{
         delta01 = DeltaGCTensor[decomp, {1, -1}],
         delta02 = CreateGCTensor[{{r, -r} -> 1, {t, -t} -> 1, {Mx`a, -Mx`b} -> delta[Mx`a, -Mx`b]}, {decomp, -decomp}]
-    }, Print[delta01]; ZeroGCTensorQ[delta01 - delta02 // ToCanonical]]
+    }, ZeroGCTensorQ[delta01 - delta02 // ToCanonical]]
+];
+
+MUnit`EndTestSection[];
+
+MUnit`BeginTestSection["Change GCTensor indices"];
+
+VerificationTest[
+    With[{
+        t1 = ContractGCTensors[covd[-Mf`A]@covd[Mf`A]@phi0[], holder1] /. PD[_]@phi0[] -> 0 // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify,
+        t2 = 1 / Sqrt[detg] (-ParamD[t][Sqrt[detg] 1/h[r] ParamD[t]@phi0[]] + ParamD[r][Sqrt[detg] f[r] ParamD[r]@phi0[]])
+    },
+        Simplify[t1 - t2] == 0
+    ]
 ];
 
 MUnit`EndTestSection[];

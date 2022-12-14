@@ -7,6 +7,7 @@ SimplificationN::usage = "Calls Simplification[] using Implode.";
 
 ErrorMarker::usage = "ErrorMarker[expr] is used to indicate an error input expr.";
 
+CatchedScreenDollarIndices::usage = "CatchedScreenDollarIndices[expr] attempts to return ScreenDollarIndices[expr] and returns expr if failed.";
 MakeDecomposedRules::usage = "MakeDecomposedRules[tensor[inds], values] generates rules by splitting all indices into subvbundles.";
 
 SetDecomposedRules::usage = "SetDecomposedRules[tensor[inds], values] sets the generated decomposed rules to tensor.";
@@ -80,6 +81,8 @@ EulerDensityP::usage = "EulerDensityP[riem, D] gives the D dimension Euler densi
 RiemannScalarList::usage = "RiemannScalarList[riem, n] gives a list of all possible scalars constructed from the Riemann tensor riem. RiemannScalarList[None, n] returns a list where Riemann tensors are represented by List.";
 
 Begin["`Private`"];
+
+CatchedScreenDollarIndices[expr_] := With[{v = Catch[ScreenDollarIndices@expr]}, If[v === Null, expr, v]];
 
 (* metric decomposition *)
 
