@@ -73,6 +73,12 @@ VerificationTest[
 ];
 
 VerificationTest[
+    ETensor[metricMF[-MF`A, -MF`B]][MF`B, -MF`C] - delta[MF`B, -MF`C] // ToCanonical
+,
+    0
+];
+
+VerificationTest[
     ETensor[metricMF[-MF`A, -MF`B]] - ETensor[metricMF[-MF`C, -MF`D]]
 ,
     ETensor[0, {-MF`A, -MF`B}]

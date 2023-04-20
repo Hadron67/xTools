@@ -12,6 +12,7 @@ DefMetric[NoSignDet, metricMx[-Mx`a, -Mx`b], CDMx];
 
 DefGBasis[decomp, {{et[Mf`A], edt[-Mf`A], t}, {er[Mf`A], edr[-Mf`A], r}}, {eX[Mx`a, -Mf`A]}];
 DefTensor[n0[Mf`A], {Mf, r}];
+DefTensor[n1[Mf`A], {Mf, r}];
 DefTensor[v0[Mx`a], {Mx, r}];
 DefTensor[phi0[], {Mf, r, t}];
 
@@ -266,6 +267,16 @@ VerificationTest[
 
 MUnit`EndTestSection[];
 
+MUnit`BeginTestSection["Misc"];
+
+VerificationTest[
+    ContractGCTensors[n1[-Mf`A] n1[Mf`A], holder1, OtherReplaces -> { n1 -> CreateGCTensor[{{r} -> Sqrt[f[r]]}, {decomp}] }]
+,
+    1
+];
+
+MUnit`EndTestSection[];
+
 MUnit`BeginTestSection["Change GCTensor indices"];
 
 VerificationTest[
@@ -277,11 +288,13 @@ VerificationTest[
     ]
 ];
 
+GCTensor[{ETensor[n0[a], {a}]}, {NoDecomp, decomp}]
+
 MUnit`EndTestSection[];
 
 UndefGBasis@decomp;
 UndefGBasis@fgc;
-UndefTensor /@ {n0, v0};
+UndefTensor /@ {n0, n1, v0};
 Undef /@ VisitorsOf@metricMf;
 Undef /@ VisitorsOf@metricMx;
 Undef /@ VisitorsOf@metricMr;

@@ -439,7 +439,7 @@ ETensor[expr_, inds_List][inds2__] /; Length@inds === Length@{inds2} := Module[
     matchedInds = Select[indPairs, SameIndexUDQ[#[[1]], #[[2]]] &];
     unmatchedInds = Append[#, UniqueIndex@#[[1]]] & /@ Select[indPairs, !SameIndexUDQ[#[[1]], #[[2]]] &];
     deltas = Times @@ (delta[ChangeIndex[#3], #2] & @@@ unmatchedInds);
-    (ReplaceDummies[expr] // ReplaceIndex[#, #1 -> #3 & @@@ unmatchedInds] &)*deltas // ReplaceIndex[#, #1 -> #2 & @@@ matchedInds] &
+    ReplaceIndex[ReplaceDummies@expr, Join[#1 -> #3 & @@@ unmatchedInds, #1 -> #2 & @@@ matchedInds]] * deltas
 ];
 ETensor /:
     ETensor[expr1_, inds1_List] + ETensor[expr2_, inds2_List] /; CompatibleIndexListsQ[inds1, inds2] := (
