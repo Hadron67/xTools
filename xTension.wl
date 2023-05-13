@@ -80,7 +80,17 @@ IndexRangeNS::usage = "IndexRangeNS[ns`a, ns`p] is similiar to IndexRange[a, p] 
 EulerDensityP::usage = "EulerDensityP[riem, D] gives the D dimension Euler density with Riemann tensor riem. Similar to xAct`xTras`EulerDensity except it does not multiply SigDet[metric].";
 RiemannScalarList::usage = "RiemannScalarList[riem, n] gives a list of all possible scalars constructed from the Riemann tensor riem. RiemannScalarList[None, n] returns a list where Riemann tensors are represented by List.";
 
+MakeCommParamDLeviCivitaCovD::usage = "MakeCommParamDLeviCivitaCovD[pd, cd[ind], expr] returns the commutator [pd, cd[ind]](expr) where pd is some derivative operator, assuming Levi-Civita connection.";
+SortCommParamDLeviCivitaCovD::usage = "SortCommParamDLeviCivitaCovD[expr, filter] puts all ParamD inside CovD in expr, using commutator returned by MakeCommParamDLeviCivitaCovD.";
+ExpandParamDLeviCivitaChristoffel::usage = "ExpandParamDLeviCivitaChristoffel[expr, filter] expands derivatives of the Christoffel tensor with Levi-Civita connection into derivatives of the metric.";
+PdSymChristoffelToRiemann::usage = "PdSymChristoffelToRiemann[expr, filter] tries to recover Riemann tensors from torsion-free Christoffel tensors in expr.";
+ChangeCovDNonChristoffel::usage = "ChangeCovDNonChristoffel[expr, cd1, cd2] applies ChangeCovD to tensors except Christoffel tensors.";
+
 Begin["`Private`"];
+
+FilterExprList[All, __] = True;
+FilterExprList[l_List, expr_, ___] := MemberQ[l, expr];
+FilterExprList[func_, args__] := func[args];
 
 CatchedScreenDollarIndices[expr_] := With[{v = Catch[ScreenDollarIndices@expr]}, If[v === Null, expr, v]];
 
@@ -465,10 +475,14 @@ DefETensorMapFunc[
     Factor,
     Together,
     ContractMetric,
-    NoScalar
+    NoScalar,
+    PdSymChristoffelToRiemann,
+    SortCommParamDLeviCivitaCovD,
+    ExpandParamDLeviCivitaChristoffel,
+    ChangeCovDNonChristoffel
 ];
 ETensor /: ParamD[params__][ETensor[expr_, args__]] := ETensor[ParamD[params][expr], args];
-ETensor /: NoScalar[ETensor[expr_, inds_]] := ETensor[NoScalar@expr, inds];
+ETensor /: SeparateMetric[args___]@ETensor[expr_, args2__] := ETensor[SeparateMetric[args][expr], args2];
 ETensor /: FindFreeIndices[ETensor[_, inds_]] := IndexList @@ inds;
 ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
     {dollars, rep},
@@ -501,9 +515,9 @@ ETensorProduct[left___, Zero, right___] = Zero;
 ETensorProduct[e_] := e;
 ETensorProduct[expr_ /; !MatchQ[expr, _List], l_List, rest___] := ETensorProduct[expr, #, rest] & /@ l;
 ETensorProduct[l_List, rest___] := ETensorProduct[#, rest] & /@ l;
-ETensorProduct[ETensor[expr_, inds_], x_?IndexedScalarQ, rest___] := ETensorProduct[ETensor[expr * x, inds], rest];
-ETensorProduct[x_?IndexedScalarQ, ETensor[expr_, inds_], rest___] := ETensorProduct[ETensor[expr * x, inds], rest];
-ETensorProduct[x_?IndexedScalarQ, y_?IndexedScalarQ, rest___] := x*y*If[Length@{rest} === 0, 1, ETensorProduct[rest]];
+ETensorProduct[ETensor[expr_, inds_], x_?IndexedScalarQ, rest___] := ETensorProduct[ETensor[expr * ReplaceDummies@x, inds], rest];
+ETensorProduct[x_?IndexedScalarQ, ETensor[expr_, inds_], rest___] := ETensorProduct[ETensor[expr * ReplaceDummies@x, inds], rest];
+ETensorProduct[x_?IndexedScalarQ, y_?IndexedScalarQ, rest___] := ReplaceDummies[x]*ReplaceDummies[y]*If[Length@{rest} === 0, 1, ETensorProduct[rest]];
 SyntaxInformation[ETensorProduct] = {"ArgumentsPattern" -> {___}};
 
 ETensorContractTwo0[expr1_, inds1_, expr2_, inds2_, n1_List, n2_List] := With[{
@@ -517,9 +531,9 @@ ETensorContractTwo[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], n1_, n2_] :
     rep = DedupeRules[inds1, inds2]
 }, ETensorContractTwo0[expr1, inds1, ReplaceIndex[expr2, rep], inds2 /. rep, n1, n2]];
 ETensorContractTwo[a_, b_, n_Integer] := ETensorContractTwo[a, b, Range[-n, -1], Range@n];
-ETensorContractTwo[ETensor[expr_, inds_], x_?IndexedScalarQ, {}, {}] := ETensor[expr * x, inds];
-ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[expr * x, inds];
-ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}, {}] := x * y;
+ETensorContractTwo[ETensor[expr_, inds_], x_?IndexedScalarQ, {}, {}] := ETensor[expr * ReplaceDummies@x, inds];
+ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[expr * ReplaceDummies@x, inds];
+ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}, {}] := ReplaceDummies[x] * ReplaceDummies[y];
 SyntaxInformation[ETensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _}};
 
 SignOfAIndex[a_Symbol] = 1;
@@ -566,7 +580,7 @@ SyntaxInformation[ETensorTranspose] = {"ArgumentsPattern" -> {_, _}};
 ETensorPDGrad[vb_][expr_] := ETensorPDGrad[expr, vb];
 ETensorPDGrad[x_?IndexedScalarQ, vb_] := With[{
     ai = First@GetIndicesOfVBundle[vb, 1]
-}, ETensor[PD[-ai]@x, {-ai}]];
+}, ETensor[PD[-ai]@ReplaceDummies@x, {-ai}]];
 ETensorPDGrad[ETensor[expr_, inds_], vb_] := With[{
     ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
 }, ETensor[PD[-ai]@expr, Append[inds, -ai]]];
@@ -609,6 +623,8 @@ EulerDensityP[riem_, dim_?EvenQ] := With[{
     ]]
 ]];
 SyntaxInformation[EulerDensityP] = {"ArgumentsPattern" -> {_, _}};
+
+(* RiemannScalarList *)
 
 RiemTermCanonicalQ[{None, None, None, None}] = True;
 RiemTermCanonicalQ[{_Integer, None, None, None}] = True;
@@ -669,6 +685,117 @@ RiemEnumerateContractions[n_] := {ActiveRiem[ConstantArray[None, {n, 4}]]} //. H
 
 RiemannScalarList[None, n_] := RiemEnumerateContractions[n];
 SyntaxInformation[RiemannScalarList] = {"ArgumentsPattern" -> {_, _}};
+
+(* Christoffel derivatives *)
+
+PdLeviCivitaGamma[pd_, cd_, metric_, a_?UpIndexQ, -b_?UpIndexQ, -c_?UpIndexQ] := With[
+    {d = UniqueIndex@a},
+    1/2 metric[a, d] (cd[-b]@pd@metric[-d, -c] + cd[-c]@pd@metric[-b, -d] - cd[-d]@pd@metric[-b, -c])
+];
+
+MakeCommParamDLeviCivitaCovD[pd_, cd_[-cdInd_?UpIndexQ], expr_] := With[{
+    metric = MetricOfCovD@cd,
+    i = UniqueIndex@cdInd,
+    cdvb = VBundleOfIndex@cdInd
+},
+    Total[If[UpIndexQ@#,
+       PdLeviCivitaGamma[pd, cd, metric, #, -cdInd, -i] ReplaceIndex[expr, {# -> i}]
+    ,
+       -PdLeviCivitaGamma[pd, cd, metric, i, -cdInd, #] ReplaceIndex[expr, {# -> -i}]
+    ] & /@ Select[List @@ FindFreeIndices@expr, VBundleOfIndex@# === cdvb &]]
+];
+MakeCommParamDLeviCivitaCovD[pd_, cd_[cdInd_?UpIndexQ], expr_] := With[{
+    metric = MetricOfCovD@cd,
+    i = UniqueIndex@cdInd,
+    i2 = UniqueIndex@cdInd
+},
+    metric[cdInd, i] MakeCommParamDLeviCivitaCovD[pd, cd[-i], expr] - metric[cdInd, i] pd@metric[-i, -i2] cd[i2]@expr
+];
+SyntaxInformation[MakeCommParamDLeviCivitaCovD] = {"ArgumentsPattern" -> {_, _, _}};
+
+SortCommParamDLeviCivitaCovD[expr_, filter_] := expr //. {
+    ParamD[pl___, p_]@cd_?CovDQ[cdInd_]@e2_ :> ParamD[pl][
+        cd[cdInd]@ParamD[p]@e2 + MakeCommParamDLeviCivitaCovD[ParamD[p], cd[cdInd], e2]
+    ] /; FilterExprList[filter, cd]
+};
+SortCommParamDLeviCivitaCovD[expr_] := SortCommParamDLeviCivitaCovD[expr, All];
+SyntaxInformation[SortCommParamDLeviCivitaCovD] = {"ArgumentsPattern" -> {_, _.}};
+
+ChristoffelPDQ[t_?xTensorQ] := ContainsAll[TensorID@t, {Christoffel, PD}];
+ChristoffelPDQ[_] = False;
+SymChristoffelQ[t_?xTensorQ] := ContainsAll[TensorID@t, {Christoffel}] && SymmetryGroupOfTensor@t === StrongGenSet[{2, 3}, GenSet@xAct`xPerm`Cycles@{2, 3}];
+SymChristoffelQ[_] = False;
+NonChristoffelQ[t_?xTensorQ] := !ContainsAll[TensorID@t, {Christoffel}];
+NonChristoffelQ[_] = True;
+CovDOfChristoffelPD[t_] := First@DeleteCases[Cases[TensorID@t, _?CovDQ], PD];
+
+ExpandParamDLeviCivitaChristoffel[expr_, filter_] := expr /. HoldPattern[
+    ParamD[pl___, p_]@chris_?ChristoffelPDQ[a_?UpIndexQ, -b_?UpIndexQ, -c_?UpIndexQ]
+] :> With[{
+        cd = CovDOfChristoffelPD@chris
+    }, ParamD[pl]@PdLeviCivitaGamma[ParamD[p], cd, MetricOfCovD@cd, a, -b, -c]
+] /; FilterExprList[filter, chris];
+ExpandParamDLeviCivitaChristoffel[expr_] := ExpandParamDLeviCivitaChristoffel[expr, All];
+SyntaxInformation[ExpandParamDLeviCivitaChristoffel] = {"ArgumentsPattern" -> {_, _.}};
+
+UpDownRules[l_List] := Replace[a_ -> b_] /@ l;
+
+TestPdSymChrisPair[exprL_List, {n1_, chris_, {a1_, b1_, c1_, d1_}, _}, {n2_, chris_, _, _}] := With[{
+    expr1 = exprL[[n1, 2]],
+    expr2 = exprL[[n2, 2]]
+}, If[n1 == n2, None, With[{
+    sym1 = ReplaceIndex[expr1, {a1 -> b1, -a1 -> -b1, b1 -> a1, -b1 -> -a1}],
+    sym2 = ReplaceIndex[expr1, {a1 -> c1, -a1 -> -c1, c1 -> a1, -c1 -> -a1}]
+}, Which[
+    ToCanonical[expr2 + sym1, UseMetricOnVBundle -> None] === 0, 1,
+    ToCanonical[expr2 + sym2, UseMetricOnVBundle -> None] === 0, 2,
+    True, None
+]]]];
+PdSymChrisPairToSymChris2[{_, chris_, {a1_, b1_, c1_, d1_}, factor_}, w_] := With[{
+    e1 = UniqueIndex@a1
+}, With[{
+    remnant = chris[d1, -b1, -e1] chris[e1, -a1, -c1] - chris[d1, -a1, -e1] chris[e1, -b1, -c1] - Riemann[CovDOfChristoffelPD@chris][-a1, -b1, -c1, d1]
+}, If[w == 1, remnant, remnant /. {b1 -> c1, c1 -> b1}] * factor]];
+PdSymChristoffelToRiemann[expr_Plus, filter_] := Module[
+    {exprL, vb, pdChrisList, chkList},
+    exprL = MapIndexed[{#2[[1]], #1} &, List @@ expr];
+    pdChrisList = Join @@ (ReplaceList[{
+        HoldPattern[{n_, e: PD[-a0_?UpIndexQ]@chris_?SymChristoffelQ[d0_?UpIndexQ, -b0_?UpIndexQ, -c0_?UpIndexQ]}] :> {
+            n,
+            chris,
+            {a0, b0, c0, d0},
+            1
+        } /; FilterExprList[filter, chris]
+    ,
+        HoldPattern[{n_, e: Times[
+            PD[-a0_?UpIndexQ]@chris_?SymChristoffelQ[d0_?UpIndexQ, -b0_?UpIndexQ, -c0_?UpIndexQ], other__
+        ]}] :> {
+            n,
+            chris,
+            {a0, b0, c0, d0},
+            Times[other]
+        } /; FilterExprList[filter, chris]
+    }] /@ exprL);
+    chkList = Fold[Function[{ret, pair},
+        With[{
+            elem1 = pdChrisList[[pair[[1]]]],
+            elem2 = pdChrisList[[pair[[2]]]],
+            selectedSet = Union @@ ret[[All, 1 ;; 2]]
+        }, If[MemberQ[selectedSet, elem1] || MemberQ[selectedSet, elem2],
+            ret
+        , With[{
+            testRet = TestPdSymChrisPair[exprL, elem1, elem2]
+        }, If[testRet === None, None, Append[ret, Append[pair, testRet]]]]]]
+    ], {}, Flatten[Table[{i, j}, {i, 1, Length@pdChrisList}, {j, i + 1, Length@pdChrisList}], 1]];
+    pdChrisList = With[{p1 = pdChrisList[[#1]], p2 = pdChrisList[[#2]]}, {p1[[1]], p2[[1]], PdSymChrisPairToSymChris2[p1, #3]}] & @@@ chkList;
+    Plus @@ Join[Delete[exprL[[All, 2]], Transpose@{Flatten@pdChrisList[[All, 1 ;; 2]]}], pdChrisList[[All, 3]]]
+];
+PdSymChristoffelToRiemann[expr_, _] := expr;
+PdSymChristoffelToRiemann[expr_] := PdSymChristoffelToRiemann[expr, All];
+SyntaxInformation[PdSymChristoffelToRiemann] = {"ArgumentsPattern" -> {_, _.}};
+
+ChangeCovDNonChristoffel[expr_, cd1_, cd2_] := expr /. HoldPattern[e: PD[_]@t_?NonChristoffelQ[___]] :> ChangeCovD[e, cd1, cd2];
+SyntaxInformation[ChangeCovDNonChristoffel] = {"ArgumentsPattern" -> {_, _, _}};
 
 End[];
 

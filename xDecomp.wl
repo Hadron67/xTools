@@ -75,6 +75,8 @@ OtherReplaces::usage = "OtherReplaces is a option of ContractGCTensors that defi
 
 RecoverSubRiemannTensors::usage = "RecoverSubRiemannTensors[GCTensor[..., {-c1, -c2, -c3, -c4}]] replaces Christoffel tensors of sub manifolds with Riemann tensors.";
 
+
+
 $xDecompDebugFilter = {};
 $xDecompDebugFilter::usage = "$xDecompDebugFilter is a global boolean variable, containing all enabled debug messages.";
 
@@ -307,10 +309,7 @@ AddCurvatureTensorsToHolder[holder_Symbol, chart_?GChartQ, chris_] := Module[
     },
         (* Christoffel tensor *)
         holder /: HeldGCTensor[holder, chris] := ETensor[
-            ChristoffelToGradMetric[chris[a, -b, -c], metric]
-            /. metric -> CachedGCTensor[holder, metric]
-            // ExpandPDToGCTensor[chart]
-            // ContractGCTensors[holder]
+            ContractGCTensors[ChristoffelToGradMetric[chris[a, -b, -c], metric] // ExpandPDToGCTensor[chart], holder]
         ,
             {a, -b, -c}
         ] // Fold[ChangeCovD[#1, PD, #2] &, #, subCDs] &
@@ -319,16 +318,14 @@ AddCurvatureTensorsToHolder[holder_Symbol, chart_?GChartQ, chris_] := Module[
 
         (* Riemann tensor *)
         holder /: HeldGCTensor[holder, riem] := ETensor[
-            ChangeCurvature[riem[-a, -b, -c, -d], cd2, PD]
-            /. {metric -> CachedGCTensor[holder, metric], chris -> CachedGCTensor[holder, chris]}
-            // ExpandPDToGCTensor[chart]
-            // ContractGCTensors[holder]
+            ContractGCTensors[ChangeCurvature[riem[-a, -b, -c, -d], cd2, PD] // ExpandPDToGCTensor[chart], holder]
         ,
             {-a, -b, -c, -d}
         ] // RecoverSubRiemannTensors
         // ToCanonical[#, UseMetricOnVBundle -> None] &
         // Fold[ChristoffelToGradMetric, #, subMetrics] &
         // SortGChartParamD[chart]
+        // ToCanonical[#, UseMetricOnVBundle -> None] &
         // Fold[ChangeCovD[#1, PD, #2] &, #, subCDs] &
         // ContractMetric[#, subMetrics] &
         // GCTensorHolderAction[holder, PostCurvatureTensorCalculation[riem], #] &;
@@ -356,7 +353,7 @@ SyntaxInformation[AddCurvatureTensorsToHolder] = {"ArgumentsPattern" -> {_, _, _
 
 SortGChartParamD[chart_][expr_] := SortGChartParamD[expr, chart];
 SortGChartParamD[expr_, chart_] := With[{
-    rules = (ParamD[l___, #3, r___]@PD[-a_Symbol]@A_ :> ParamD[l, r]@PD[-a]@ParamD[#3]@A) & @@@ CoordsOfGChart@chart
+    rules = (HoldPattern[ParamD[l___, #3, r___]@PD[-a_Symbol]@A_] :> ParamD[l, r]@PD[-a]@ParamD[#3]@A) & @@@ CoordsOfGChart@chart
 }, expr //. rules];
 SyntaxInformation[SortGChartParamD] = {"ArgumentsPattern" -> {_, _.}};
 
@@ -403,7 +400,7 @@ SyntaxInformation[ExpandPDToBasis] = {"ArgumentsPattern" -> {_, _.}};
 ExpandPDToGCTensor[chart_][expr_] := ExpandPDToGCTensor[expr, chart];
 ExpandPDToGCTensor[expr_, chart_?GChartQ] := With[{
     pmQ = Symbol[ToString[VBundleOfGChart@chart] <> "`pmQ"]
-}, expr /. PD[a_?pmQ] -> PDGChart[-chart][a]];
+}, expr /. HoldPattern[PD[a_?pmQ]] :> PDGChart[-chart][a]];
 SyntaxInformation[ExpandPDToGCTensor] = {"ArgumentsPattern" -> {_, _.}};
 
 ExpandMetric[chart_?GChartQ][expr_] := ExpandMetric[expr, chart];
@@ -534,9 +531,10 @@ GCTensorContractTwo[GCTensor[arr1_, basis1_], GCTensor[arr2_, basis2_], n1_List,
     GCTensorDotSameBasis[trans1, trans2, Length@n1, OptionValue[PostETensorContract]]
 ] /; Length@n1 > 0;
 GCTensorContractTwo[t1_GCTensor, t2_GCTensor, {}, {}, opt: OptionsPattern[]] := GCTensorProduct[t1, t2];
-GCTensorContractTwo[args___] := (
+GCTensorContractTwo[args___] = Null /; (
     DebugPrint[GCTensorContractTwo, "untransformed args: ", {args}];
-    Throw@Message[GCTensorContractTwo::argrx, Length@{args}]
+    Message[GCTensorContractTwo::argrx, Length@{args}];
+    False
 );
 SyntaxInformation[GCTensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _, OptionsPattern[]}};
 
@@ -693,10 +691,15 @@ DefGCTensorMapFunc[
     ChangeCovD,
     ChangeCurvature,
     ChristoffelToRiemann,
-    ChristoffelToGradMetric
+    ChristoffelToGradMetric,
+    PdSymChristoffelToRiemann,
+    SortCommParamDLeviCivitaCovD,
+    ExpandParamDLeviCivitaChristoffel,
+    ChangeCovDNonChristoffel
 ];
 GCTensor[e_, {}][] := Scalar[e];
 GCTensor /: ParamD[args__]@GCTensor[arr_, basis] := GCTensor[Map[ParamD[args], arr, {Length@basis}], basis];
+GCTensor /: SeparateMetric[args__]@GCTensor[arr_, basis] := GCTensor[Map[SeparateMetric[args], arr, {Length@basis}], basis];
 GCTensor /: ETensor[t_GCTensor[inds__], {inds2__}] := With[{
     perm = PermutationProduct[InversePermutation@Ordering@{inds}, Ordering@{inds2}]
 }, GCTensorTranspose[t, perm]] /; Sort@{inds} === Sort@{inds2};

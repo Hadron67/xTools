@@ -12,6 +12,7 @@ DefConstantSymbol[Lambda0];
 DefMetric[1, metricMX[-MX`a, -MX`b], CDMX, OtherDependencies -> {r}, PrintAs -> "g", SymbolOfCovD -> {";", "\[Del]"}];
 DefMetric[1, metricMF[-MF`A, -MF`B], CDMF, OtherDependencies -> {r}, PrintAs -> "g", SymbolOfCovD -> {";", "D"}];
 DefTensor[V0[MF`A], MF];
+DefTensor[T1[MX`a, -MX`b], {MX, r}];
 
 DefCoordinateParameter[TangentMF -> TangentMR, r, eMR, edMR];
 
@@ -104,7 +105,33 @@ VerificationTest[
 
 MUnit`EndTestSection[];
 
-UndefTensor /@ {eMR, edMR, V0};
+MUnit`BeginTestSection["ParamD and CovD"];
+
+VerificationTest[
+    SortCommParamDLeviCivitaCovD[ParamD[r]@CDMX[MX`a]@T1[MX`b, -MX`c]] - (
+        ChristoffelToGradMetric[ChangeCovD[ParamD[r][metricMX[MX`a, MX`d] CDMX[-MX`d]@T1[MX`b, -MX`c]], CDMX, PD], metricMX] /. ParamD[p_]@PD[b_]@expr_ :> PD[b]@ParamD[p]@expr // ChangeCovD[#, PD, CDMX] &
+    ) // ToCanonicalN // ContractMetric[#, AllowUpperDerivatives -> True] & // ToCanonicalN
+,
+    0
+];
+
+VerificationTest[
+    ExpandParamDLeviCivitaChristoffel[ParamD[r]@ChristoffelCDMX[MX`a, -MX`b, -MX`c]] - (
+        ChristoffelToGradMetric[ParamD[r]@ChristoffelCDMX[MX`a, -MX`b, -MX`c], metricMX] /. ParamD[p_]@PD[b_]@expr_ :> PD[b]@ParamD[p]@expr // ChangeCovD[#, PD, CDMX] &
+    ) // ToCanonicalN
+,
+    0
+];
+
+VerificationTest[
+    PdSymChristoffelToRiemann[ChangeCurvature[RiemannCDMF[-MF`A, -MF`B, -MF`C, MF`D], CDMF, PD]] - RiemannCDMF[-MF`A, -MF`B, -MF`C, MF`D] // ToCanonicalN
+,
+    0
+];
+
+MUnit`EndTestSection[];
+
+UndefTensor /@ {eMR, edMR, V0, T1};
 Undef /@ VisitorsOf@metricMX;
 Undef /@ VisitorsOf@metricMF;
 UndefMetric[metricMX];
