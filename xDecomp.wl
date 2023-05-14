@@ -75,8 +75,6 @@ OtherReplaces::usage = "OtherReplaces is a option of ContractGCTensors that defi
 
 RecoverSubRiemannTensors::usage = "RecoverSubRiemannTensors[GCTensor[..., {-c1, -c2, -c3, -c4}]] replaces Christoffel tensors of sub manifolds with Riemann tensors.";
 
-
-
 $xDecompDebugFilter = {};
 $xDecompDebugFilter::usage = "$xDecompDebugFilter is a global boolean variable, containing all enabled debug messages.";
 
@@ -312,7 +310,7 @@ AddCurvatureTensorsToHolder[holder_Symbol, chart_?GChartQ, chris_] := Module[
             ContractGCTensors[ChristoffelToGradMetric[chris[a, -b, -c], metric] // ExpandPDToGCTensor[chart], holder]
         ,
             {a, -b, -c}
-        ] // Fold[ChangeCovD[#1, PD, #2] &, #, subCDs] &
+        ] // NoScalar // Fold[ChangeCovD[#1, PD, #2] &, #, subCDs] &
         // GCTensorHolderAction[holder, PostCurvatureTensorCalculation[chris], #] &;
         holder /: HeldCovDOfGCTensorHolder[holder, cd2] := CovDGChart[-chart, CachedGCTensor[holder, chris, {1, -1, -1}]];
 
@@ -321,13 +319,13 @@ AddCurvatureTensorsToHolder[holder_Symbol, chart_?GChartQ, chris_] := Module[
             ContractGCTensors[ChangeCurvature[riem[-a, -b, -c, -d], cd2, PD] // ExpandPDToGCTensor[chart], holder]
         ,
             {-a, -b, -c, -d}
-        ] // RecoverSubRiemannTensors
-        // ToCanonical[#, UseMetricOnVBundle -> None] &
-        // Fold[ChristoffelToGradMetric, #, subMetrics] &
-        // SortGChartParamD[chart]
-        // ToCanonical[#, UseMetricOnVBundle -> None] &
-        // Fold[ChangeCovD[#1, PD, #2] &, #, subCDs] &
-        // ContractMetric[#, subMetrics] &
+        ] // NoScalar
+        // SortCommParamDLeviCivitaCovD // ToCanonicalN
+        // ExpandParamDLeviCivitaChristoffel // ToCanonicalN
+        // Fold[ChangeCovDNonChristoffel[#1, PD, #2] &, #, subCDs] & // ToCanonicalN
+        // PdSymChristoffelToRiemann // ToCanonicalN
+        // CovDCommuToRiemann // ToCanonicalN
+        // SeparateMetricRiemann // ToCanonicalN
         // GCTensorHolderAction[holder, PostCurvatureTensorCalculation[riem], #] &;
 
         (* Ricci tensor *)
@@ -335,13 +333,17 @@ AddCurvatureTensorsToHolder[holder_Symbol, chart_?GChartQ, chris_] := Module[
             CachedGCTensor[holder, riem][-a, -c, -b, -d] CachedGCTensor[holder, metric][c, d] // ContractGCTensors[holder]
         ,
             {-a, -b}
-        ] // ContractMetric[#, subMetrics] &
+        ] // ToCanonicalN
+        // ContractTensorWithMetric[#, Riemann /@ subCDs, subMetrics] &
+        // ToCanonicalN
         // GCTensorHolderAction[holder, PostCurvatureTensorCalculation[ricci], #] &;
 
         (* Ricci scalar *)
         holder /: HeldGCTensor[holder, ricciScalar] := GCTensor[
-            CachedGCTensor[holder, ricci][-a, -b] CachedGCTensor[holder, metric][a, b]
-            // ContractGCTensors[holder]
+            ContractGCTensors[CachedGCTensor[holder, ricci][-a, -b] CachedGCTensor[holder, metric][a, b], holder]
+            // ToCanonicalN
+            // ContractTensorWithMetric[#, Ricci /@ subCDs, subMetrics] &
+            // ToCanonicalN
             // Simplify
             // GCTensorHolderAction[holder, PostCurvatureTensorCalculation[ricciScalar], #] &
         ,
@@ -695,7 +697,10 @@ DefGCTensorMapFunc[
     PdSymChristoffelToRiemann,
     SortCommParamDLeviCivitaCovD,
     ExpandParamDLeviCivitaChristoffel,
-    ChangeCovDNonChristoffel
+    ChangeCovDNonChristoffel,
+    SeparateMetricRiemann,
+    CovDCommuToRiemann,
+    ContractTensorWithMetric
 ];
 GCTensor[e_, {}][] := Scalar[e];
 GCTensor /: ParamD[args__]@GCTensor[arr_, basis] := GCTensor[Map[ParamD[args], arr, {Length@basis}], basis];

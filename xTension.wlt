@@ -129,6 +129,12 @@ VerificationTest[
     0
 ];
 
+VerificationTest[
+    With[{expr = CDMF[-MF`A]@CDMF[-MF`B]@V0[MF`A] - CDMF[-MF`B]@CDMF[-MF`A]@V0[MF`A]}, CovDCommuToRiemann[expr] - SortCovDs[expr, CDMF] // ToCanonical]
+,
+    0
+];
+
 MUnit`EndTestSection[];
 
 UndefTensor /@ {eMR, edMR, V0, T1};

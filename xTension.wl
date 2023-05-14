@@ -85,6 +85,9 @@ SortCommParamDLeviCivitaCovD::usage = "SortCommParamDLeviCivitaCovD[expr, filter
 ExpandParamDLeviCivitaChristoffel::usage = "ExpandParamDLeviCivitaChristoffel[expr, filter] expands derivatives of the Christoffel tensor with Levi-Civita connection into derivatives of the metric.";
 PdSymChristoffelToRiemann::usage = "PdSymChristoffelToRiemann[expr, filter] tries to recover Riemann tensors from torsion-free Christoffel tensors in expr.";
 ChangeCovDNonChristoffel::usage = "ChangeCovDNonChristoffel[expr, cd1, cd2] applies ChangeCovD to tensors except Christoffel tensors.";
+CovDCommuToRiemann::usage = "CovDCommuToRiemann[expr, filter] find covd commutators in expr and convert them into Riemann tensors.";
+SeparateMetricRiemann::usage = "SeparateMetricRiemann[expr, filter] calls SeparateMetric on all Riemann tensors.";
+ContractTensorWithMetric::usage = "ContractTensorWithMetric[expr, metric, filter] calls ContractMetric[t, metric] on specific tensors in expr.";
 
 Begin["`Private`"];
 
@@ -170,6 +173,7 @@ PD[-a_Symbol?CoordinateIndexQ][A_] := With[
     ParamD[param][A] DualBasisOfCoordinateParameter[param][-a]
 ];
 ParamD[p_Symbol?CoordinateParameterQ]@PD[-a_Symbol]@A_ := PD[-a]@ParamD[p]@A;
+Protect[PD, ParamD];
 
 DecomposedIndicesList[ids_, vb_] := Module[
     {l, sp},
@@ -479,7 +483,10 @@ DefETensorMapFunc[
     PdSymChristoffelToRiemann,
     SortCommParamDLeviCivitaCovD,
     ExpandParamDLeviCivitaChristoffel,
-    ChangeCovDNonChristoffel
+    ChangeCovDNonChristoffel,
+    SeparateMetricRiemann,
+    CovDCommuToRiemann,
+    ContractTensorWithMetric
 ];
 ETensor /: ParamD[params__][ETensor[expr_, args__]] := ETensor[ParamD[params][expr], args];
 ETensor /: SeparateMetric[args___]@ETensor[expr_, args2__] := ETensor[SeparateMetric[args][expr], args2];
@@ -536,8 +543,6 @@ ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[
 ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}, {}] := ReplaceDummies[x] * ReplaceDummies[y];
 SyntaxInformation[ETensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _}};
 
-SignOfAIndex[a_Symbol] = 1;
-SignOfAIndex[-a_Symbol] = -1;
 ETensorContract[ETensor[expr_, inds_], n1_List, n2_List] := With[{
     a1 = inds[[n1]],
     a2 = inds[[n2]]
@@ -723,11 +728,15 @@ SyntaxInformation[SortCommParamDLeviCivitaCovD] = {"ArgumentsPattern" -> {_, _.}
 
 ChristoffelPDQ[t_?xTensorQ] := ContainsAll[TensorID@t, {Christoffel, PD}];
 ChristoffelPDQ[_] = False;
-SymChristoffelQ[t_?xTensorQ] := ContainsAll[TensorID@t, {Christoffel}] && SymmetryGroupOfTensor@t === StrongGenSet[{2, 3}, GenSet@xAct`xPerm`Cycles@{2, 3}];
+SymChristoffelQ[t_?xTensorQ] := MemberQ[TensorID@t, Christoffel] && SymmetryGroupOfTensor@t === StrongGenSet[{2, 3}, GenSet@xAct`xPerm`Cycles@{2, 3}];
 SymChristoffelQ[_] = False;
-NonChristoffelQ[t_?xTensorQ] := !ContainsAll[TensorID@t, {Christoffel}];
+NonChristoffelQ[t_?xTensorQ] := !MemberQ[TensorID@t, Christoffel];
 NonChristoffelQ[_] = True;
 CovDOfChristoffelPD[t_] := First@DeleteCases[Cases[TensorID@t, _?CovDQ], PD];
+RiemannTensorQ[t_?xTensorQ] := MemberQ[TensorID@t, Riemann];
+RiemannTensorQ[_] = False;
+RicciTensorQ[t_?xTensorQ] := MemberQ[TensorID@t, Ricci];
+RicciTensorQ[_] = False;
 
 ExpandParamDLeviCivitaChristoffel[expr_, filter_] := expr /. HoldPattern[
     ParamD[pl___, p_]@chris_?ChristoffelPDQ[a_?UpIndexQ, -b_?UpIndexQ, -c_?UpIndexQ]
@@ -740,7 +749,7 @@ SyntaxInformation[ExpandParamDLeviCivitaChristoffel] = {"ArgumentsPattern" -> {_
 
 UpDownRules[l_List] := Replace[a_ -> b_] /@ l;
 
-TestPdSymChrisPair[exprL_List, {n1_, chris_, {a1_, b1_, c1_, d1_}, _}, {n2_, chris_, _, _}] := With[{
+TestPdSymChrisPair[exprL_List][{n1_, chris_, {a1_, b1_, c1_, d1_}, _}, {n2_, chris_, _, _}] := With[{
     expr1 = exprL[[n1, 2]],
     expr2 = exprL[[n2, 2]]
 }, If[n1 == n2, None, With[{
@@ -756,6 +765,17 @@ PdSymChrisPairToSymChris2[{_, chris_, {a1_, b1_, c1_, d1_}, factor_}, w_] := Wit
 }, With[{
     remnant = chris[d1, -b1, -e1] chris[e1, -a1, -c1] - chris[d1, -a1, -e1] chris[e1, -b1, -c1] - Riemann[CovDOfChristoffelPD@chris][-a1, -b1, -c1, d1]
 }, If[w == 1, remnant, remnant /. {b1 -> c1, c1 -> b1}] * factor]];
+FoldBinaryTest[operator_, list_] := Fold[Function[{ret, pair},
+    With[{
+        elem1 = list[[pair[[1]]]],
+        elem2 = list[[pair[[2]]]],
+        selectedSet = Union @@ ret[[All, 1 ;; 2]]
+    }, If[MemberQ[selectedSet, elem1] || MemberQ[selectedSet, elem2],
+        ret
+    , With[{
+        testRet = operator[elem1, elem2]
+    }, If[testRet === None, ret, Append[ret, If[testRet =!= True, Append[pair, testRet], pair]]]]]]
+], {}, Flatten[Table[{i, j}, {i, 1, Length@list}, {j, i + 1, Length@list}], 1]];
 PdSymChristoffelToRiemann[expr_Plus, filter_] := Module[
     {exprL, vb, pdChrisList, chkList},
     exprL = MapIndexed[{#2[[1]], #1} &, List @@ expr];
@@ -776,17 +796,7 @@ PdSymChristoffelToRiemann[expr_Plus, filter_] := Module[
             Times[other]
         } /; FilterExprList[filter, chris]
     }] /@ exprL);
-    chkList = Fold[Function[{ret, pair},
-        With[{
-            elem1 = pdChrisList[[pair[[1]]]],
-            elem2 = pdChrisList[[pair[[2]]]],
-            selectedSet = Union @@ ret[[All, 1 ;; 2]]
-        }, If[MemberQ[selectedSet, elem1] || MemberQ[selectedSet, elem2],
-            ret
-        , With[{
-            testRet = TestPdSymChrisPair[exprL, elem1, elem2]
-        }, If[testRet === None, None, Append[ret, Append[pair, testRet]]]]]]
-    ], {}, Flatten[Table[{i, j}, {i, 1, Length@pdChrisList}, {j, i + 1, Length@pdChrisList}], 1]];
+    chkList = FoldBinaryTest[TestPdSymChrisPair[exprL], pdChrisList];
     pdChrisList = With[{p1 = pdChrisList[[#1]], p2 = pdChrisList[[#2]]}, {p1[[1]], p2[[1]], PdSymChrisPairToSymChris2[p1, #3]}] & @@@ chkList;
     Plus @@ Join[Delete[exprL[[All, 2]], Transpose@{Flatten@pdChrisList[[All, 1 ;; 2]]}], pdChrisList[[All, 3]]]
 ];
@@ -796,6 +806,44 @@ SyntaxInformation[PdSymChristoffelToRiemann] = {"ArgumentsPattern" -> {_, _.}};
 
 ChangeCovDNonChristoffel[expr_, cd1_, cd2_] := expr /. HoldPattern[e: PD[_]@t_?NonChristoffelQ[___]] :> ChangeCovD[e, cd1, cd2];
 SyntaxInformation[ChangeCovDNonChristoffel] = {"ArgumentsPattern" -> {_, _, _}};
+
+TermList[expr_Plus] := List @@ expr;
+TermList[expr_] := {expr};
+TestCovDCommuPair[{_, cd_, {a1_, b1_}, term1_, other1_}, {_, cd_, {a2_, b2_}, term2_, other2_}] := If[ToCanonicalN[
+    other1 * cd[b1]@cd[a1]@term1 + other2 * cd[a2]@cd[b2]@term2
+] === 0, True, None];
+CovDCommuPairToRiemann[{_, cd_, {a1_, b1_}, term1_, other1_}] := ToCanonicalN[-other1 * cd[b1]@cd[a1]@term1 + xAct`xTensor`Private`makeCommuteCovDs[term1, cd, {b1, a1}] * other1];
+CovDCommuToRiemann[expr_Plus, filter_] := Module[
+    {exprL, cdcdTerms},
+    exprL = MapIndexed[{#2[[1]], #1} &, List @@ expr];
+    cdcdTerms = Join @@ (ReplaceList[{
+        HoldPattern[{n_, e: cd_?CovDQ[a1_]@cd_?CovDQ[a2_]@term_}] :> {n, cd, {a1, a2}, term, 1} /; FilterExprList[filter, cd],
+        HoldPattern[{n_, e: Times[cd_?CovDQ[a1_]@cd_?CovDQ[a2_]@term_, other__]}] :> {n, cd, {a1, a2}, term, Times[other]} /; FilterExprList[filter, cd]
+    }] /@ exprL);
+    cdcdTerms = With[{p1 = cdcdTerms[[#1]], p2 = cdcdTerms[[#2]]}, {p1[[1]], p2[[1]], CovDCommuPairToRiemann@p1}] & @@@ FoldBinaryTest[TestCovDCommuPair, cdcdTerms];
+    Plus @@ Join[Delete[exprL[[All, 2]], Transpose@{Flatten@cdcdTerms[[All, 1 ;; 2]]}], cdcdTerms[[All, 3]]]
+];
+CovDCommuToRiemann[expr_, _] := expr
+CovDCommuToRiemann[expr_] := CovDCommuToRiemann[expr, All];
+SyntaxInformation[PdSymChristoffelToRiemann] = {"ArgumentsPattern" -> {_, _.}};
+
+SignOfIndex[_?UpIndexQ] = 1;
+SignOfIndex[-_?UpIndexQ] = -1;
+SeparateMetricOneData[t_[inds__], ud_] := With[{
+    li = MapThread[If[SignOfIndex@#1 =!= #2,
+        With[{a1 = UniqueIndex@#1}, {-a1, delta[a1, #1]}]
+    ,
+        {#1, 1}
+    ] &, {{inds}, ud}]
+}, {t @@ li[[All, 1]], Times @@ li[[All, 2]]}];
+SeparateMetricRiemann[expr_, filter_] := expr /. e: rt_?RiemannTensorQ[inds__] :> (Times @@ SeparateMetricOneData[e, {-1, -1, -1, -1}]) /; FilterExprList[filter, rt];
+SeparateMetricRiemann[expr_] := SeparateMetricRiemann[expr, All];
+SyntaxInformation[SeparateMetricRiemann] = {"ArgumentsPattern" -> {_, _.}};
+
+ContractTensorWithMetric[expr_, filter_, metrics_] := expr //. {
+    t_?xTensorQ[inds1__] metric_?MetricQ[inds2__] :> ContractMetric[t[inds1]metric[inds2], metrics] /; Length@Intersection[{inds1}, -{inds2}] === 2 && FilterExprList[filter, t]
+};
+SyntaxInformation[ContractTensorWithMetric] = {"ArgumentsPattern" -> {_, _, _}};
 
 End[];
 

@@ -42,12 +42,13 @@ SetHeldMetric[holder1, metricMf, metricVal, metricInvVal];
 AddCurvatureTensorsToHolder[holder1, decomp, ChristoffelCDMf];
 
 VerificationTest[
-    CachedGCTensor[holder1, RicciScalarCDMf, {}][],
-    (1/(2 r^2 h[r]^2))(h[r] (2 h[
+    ContractMetric[CachedGCTensor[holder1, RicciScalarCDMf, {}][], {metricMx}] - (1/(2 r^2 h[r]^2))(h[r] (2 h[
        r] (RicciScalarCDMx[] - dimx r f'[r]) -
      r^2 f'[r] h'[r]) +
   f[r] (-2 (-1 + dimx) dimx h[r]^2 + r^2 h'[r]^2 -
-     2 r h[r] (dimx h'[r] + r h''[r])))
+     2 r h[r] (dimx h'[r] + r h''[r]))) // Simplify
+,
+    0
 ];
 
 VerificationTest[
