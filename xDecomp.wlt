@@ -261,7 +261,7 @@ MUnit`BeginTestSection["DeltaGCTensor"];
 
 VerificationTest[
     With[{
-        delta01 = DeltaGCTensor[decomp, {1, -1}],
+        delta01 = DeltaGCTensor[decomp, -decomp],
         delta02 = CreateGCTensor[{{r, -r} -> 1, {t, -t} -> 1, {Mx`a, -Mx`b} -> delta[Mx`a, -Mx`b]}, {decomp, -decomp}]
     }, ZeroGCTensorQ[delta01 - delta02 // ToCanonical]]
 ];

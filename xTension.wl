@@ -89,11 +89,23 @@ CovDCommuToRiemann::usage = "CovDCommuToRiemann[expr, filter] find covd commutat
 SeparateMetricRiemann::usage = "SeparateMetricRiemann[expr, filter] calls SeparateMetric on all Riemann tensors.";
 ContractTensorWithMetric::usage = "ContractTensorWithMetric[expr, metric, filter] calls ContractMetric[t, metric] on specific tensors in expr.";
 
+ListToCanonical::usage = "ListToCanonical[list, group] canonicalizes the list with the given symmetry group.";
+
+$xToolsDebugFilter = {};
+$xToolsDebugFilter::usage = "$xDecompDebugFilter is a global variable, containing all enabled debug messages.";
+
+$xToolsDebugPrint = Print;
+$xToolsDebugPrint::usage = "$xDecompDebugPrint is a global hook variable for printing debug messages.";
+xToolsDebugPrint::usage = "xToolsDebugPrint[tag, msg] prints debug message with specified tag.";
+
 Begin["`Private`"];
 
 FilterExprList[All, __] = True;
 FilterExprList[l_List, expr_, ___] := MemberQ[l, expr];
 FilterExprList[func_, args__] := func[args];
+
+xToolsDebugPrint[tag_, msg___] := If[FilterExprList[$xToolsDebugFilter, tag], $xToolsDebugPrint[tag, " ", msg]];
+SetAttributes[DebugPrint, HoldRest];
 
 CatchedScreenDollarIndices[expr_] := With[{v = Catch[ScreenDollarIndices@expr]}, If[v === Null, expr, v]];
 
@@ -579,7 +591,7 @@ ETensorTranspose[expr_, {}] := expr;
 ETensorTranspose[expr_, {_Integer}] := expr;
 ETensorTranspose[0, _] = 0;
 ETensorTranspose[Zero, _] = Zero;
-ETensorTranspose[expr_Plus, perms_] := ETensorTranspose[#, perms] /@ expr;
+ETensorTranspose[expr_Plus, perms_] := ETensorTranspose[#, perms] & /@ expr;
 SyntaxInformation[ETensorTranspose] = {"ArgumentsPattern" -> {_, _}};
 
 ETensorPDGrad[vb_][expr_] := ETensorPDGrad[expr, vb];
@@ -807,8 +819,6 @@ SyntaxInformation[PdSymChristoffelToRiemann] = {"ArgumentsPattern" -> {_, _.}};
 ChangeCovDNonChristoffel[expr_, cd1_, cd2_] := expr /. HoldPattern[e: PD[_]@t_?NonChristoffelQ[___]] :> ChangeCovD[e, cd1, cd2];
 SyntaxInformation[ChangeCovDNonChristoffel] = {"ArgumentsPattern" -> {_, _, _}};
 
-TermList[expr_Plus] := List @@ expr;
-TermList[expr_] := {expr};
 TestCovDCommuPair[{_, cd_, {a1_, b1_}, term1_, other1_}, {_, cd_, {a2_, b2_}, term2_, other2_}] := If[ToCanonicalN[
     other1 * cd[b1]@cd[a1]@term1 + other2 * cd[a2]@cd[b2]@term2
 ] === 0, True, None];
@@ -823,7 +833,7 @@ CovDCommuToRiemann[expr_Plus, filter_] := Module[
     cdcdTerms = With[{p1 = cdcdTerms[[#1]], p2 = cdcdTerms[[#2]]}, {p1[[1]], p2[[1]], CovDCommuPairToRiemann@p1}] & @@@ FoldBinaryTest[TestCovDCommuPair, cdcdTerms];
     Plus @@ Join[Delete[exprL[[All, 2]], Transpose@{Flatten@cdcdTerms[[All, 1 ;; 2]]}], cdcdTerms[[All, 3]]]
 ];
-CovDCommuToRiemann[expr_, _] := expr
+CovDCommuToRiemann[expr_, _] := expr;
 CovDCommuToRiemann[expr_] := CovDCommuToRiemann[expr, All];
 SyntaxInformation[PdSymChristoffelToRiemann] = {"ArgumentsPattern" -> {_, _.}};
 
@@ -844,6 +854,15 @@ ContractTensorWithMetric[expr_, filter_, metrics_] := expr //. {
     t_?xTensorQ[inds1__] metric_?MetricQ[inds2__] :> ContractMetric[t[inds1]metric[inds2], metrics] /; Length@Intersection[{inds1}, -{inds2}] === 2 && FilterExprList[filter, t]
 };
 SyntaxInformation[ContractTensorWithMetric] = {"ArgumentsPattern" -> {_, _, _}};
+
+ListToCanonical[list_List, group_] := Module[
+    {canonList, repeated, perm},
+    canonList = Sort[list];
+    repeated = Transpose[Position[canonList, #, {1}]][[1]] & /@ Union[list];
+    perm = CanonicalPerm[Images@InversePermutation@Ordering@list, Length@list, group, {}, RepeatedSet /@ repeated];
+    If[perm === 0, {0, list}, {If[Head[perm] === Times, -1, 1], PermuteList[canonList, InversePerm@perm]}]
+];
+SyntaxInformation[ListToCanonical] = {"ArgumentsPattern" -> {_, _}};
 
 End[];
 

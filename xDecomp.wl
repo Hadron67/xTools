@@ -3,6 +3,8 @@ BeginPackage["xTools`xDecomp`", {"xAct`xCore`", "xAct`xTensor`", "xTools`xTensio
 (Unprotect[#]; ClearAll[#];) & /@ Names@{"`*", "`*"};
 
 GChartQ::usage = "GChartQ[chart] gives True if chart is a generalized chart.";
+DecompositionOfGChart::usage = "DecompositionOfGChart[chart] returns the form {coords, submanifolds}";
+PDInfoOfGChart::usage = "PDInfoOfGChart[chart] returns information for computing the partial derivative in the chart.";
 CoordsOfGChart::usage = "CoordsOfGChart[chart] gives single-variable coordinate list of the generalized chart, each element is in the form {e, ed, param}."
 SubManifoldsOfGChart::usage = "SubManifoldsOfGChart[chart] gives a list of basis tensors of the generalized chart.";
 MetricOfGChart::usage = "MetricOfGChart[chart] gives the metric of generalized chart, if defined."
@@ -43,17 +45,21 @@ ExpandMetric::usage = "ExpandMetric[expr, chart] or ExpandMetric[chart][expr] re
 ExpandPDToGCTensor::usage = "ExpandPDToGCTensor[expr, chart] or ExpandPDToGCTensor[chart][expr] replaces all PDs to GCTensors in expr.";
 
 GCTensor::usage = "GCTensor[values, charts] represents a generalized CTensor.";
+GCArray::usage = "GCArray[arr, {{clen, subLen}, ...}] represents a generalized multi-dimension array.";
 GCTensorChangeBasis::usage = "GCTensorChangeBasis[GCTensor[...], n, basis] changes the basis of n-th axis to the specified basis.";
 EnsureGCTensorBasis::usage = "EnsureGCTensorBasis[GCTensor[...], basis] changes the basis of the GCTensor of any of the axes doesn't match the given one.";
 GCTensorTranspose::usage = "GCTensorTranspose[GCTensor[...], perms] performs the tensor transpose of GCTensor.";
 GCTensorContract::usage = "GCTensorContract[T, n1, n2] contracts the n1 axis with n2 axis of T.";
 GCTensorContractTwo::usage = "GCTensorContractTwo[T1, T2, n1, n2] computes the tensor contraction between two tensors, in which n1-th axis of T1 and n2-th axis of T2.";
 GCTensorProduct::usage = "GCTensorProduct[T1, T2] computes the tensor product of T1 and T2.";
-GCTensorFixedContract::usage = "GCTensorFixedContract[T, T2, n] contracts n-th axis of T with the symmetric tensor T2, with the resulting axis stay at the original position. Typically used to change index.";
+GCTensorFixedContract::usage = "GCTensorFixedContract[T, T2, n] contracts n-th axis of T with the first axis of tensor T2, with the resulting axis stay at the original position. Typically used to change index.";
 GCTensorToBasis::usage = "GCTensorToBasis[expr] converts GCTensor expressions to basis.";
-GCTensorChangeIndices::usage = "GCTensorChangeIndices[GCTensor[...], inds, metric, metricI] changes the indices of GCTensor if unmatches with inds, using metric.";
+GCTensorChangeIndices::usage = "GCTensorChangeIndices[GCTensor[...], inds, holder] changes the indices of GCTensor if unmatches with inds, using metric.";
 ZeroGCTensorQ::usage = "ZeroGCTensorQ[T] gives True of GCTensor T is zero.";
 PostETensorContract::usage = "PostETensorContract is an option of GCTensorContractTwo, GCTensorContract, ContractGCTensors that's called after each ETensor contraction.";
+GCTensorToGCArray::usage = "GCTensorToGCArray[GCTensor[...]] converts the GCTensor into GCArray.";
+GCArrayContract::usage = "GCArrayContract[T, n1, n2] contracts the n1 axis with n2 axis of T";
+GCArrayContractTwo::usage = "GCArrayContractTwo[T1, T2, n1, n2] computes the tensor product of two arrays and then contracts n1 axes of T1 with n2 axes of T2.";
 
 GCTensorToComponentRules::usage = "GCTensorToComponentRules[T, head] converts GCTensor to a list of component rules.";
 HeadOfCoordinateIndex::usage = "HeadOfCoordinateIndex is an option of GCTensorToComponentRules that defines the head used for coordinate indices. Default is LI.";
@@ -73,42 +79,31 @@ ReplaceHeldGCTensors::usage = "ReplaceHeldGCTensors is an option of ContractGCTe
 ReplaceHeldCovD::usage = "ReplaceHeldCovD is an option of ContractGCTensors that contains a list of CovDs to replace.";
 OtherReplaces::usage = "OtherReplaces is a option of ContractGCTensors that defines additional tensors or covds to replace.";
 
-RecoverSubRiemannTensors::usage = "RecoverSubRiemannTensors[GCTensor[..., {-c1, -c2, -c3, -c4}]] replaces Christoffel tensors of sub manifolds with Riemann tensors.";
-
-$xDecompDebugFilter = {};
-$xDecompDebugFilter::usage = "$xDecompDebugFilter is a global boolean variable, containing all enabled debug messages.";
-
-$xDecompDebugPrint = Print;
-$xDecompDebugPrint::usage = "$xDecompDebugPrint is a global hook variable for printing debug messages.";
-
 Begin["`Private`"];
 
 Off[RuleDelayed::rhs];
 
-FilterDebugTag[All, _] = True;
-FilterDebugTag[tags_List, tag_] := MemberQ[tags, tag];
-FilterDebugTag[_, _] = False;
-
-DebugPrint[tag_, msg___] := If[FilterDebugTag[$xDecompDebugFilter, tag], $xDecompDebugPrint[tag, " ", msg]];
-SetAttributes[DebugPrint, HoldRest];
-
+DecompositionOfGChart::undef = "GChart `1` is undefined.";
 GChartQ[_] = False;
-CoordsOfGChart[_] = None;
-CoordsOfGChart[-a_Symbol] := CoordsOfGChart[a];
-SubManifoldsOfGChart[_] = None;
-MetricOfGChart[_] = None;
-GChartParamQ[_] = False;
-GChartMetricDecompose[_, expr_] := expr;
+DecompositionOfGChart[a_] := (Message[DecompositionOfGChart::undef, a]; None);
+DecompositionOfGChart[-a_?GChartQ] := DecompositionOfGChart[a];
+PDInfoOfGChart[_] = None;
+PDInfoOfGChart[-a_?GChartQ] := PDInfoOfGChart[a];
+CoordsOfGChart[a_] := DecompositionOfGChart[a][[1]];
+SubManifoldsOfGChart[a_] := DecompositionOfGChart[a][[2]];
 VBundleOfGChart[chart_] := First@SlotsOfTensor@CoordsOfGChart[chart][[1, 1]];
-SubVBundlesOfGChart[chart_Symbol] := SlotsOfTensor[#][[1]] & /@ SubManifoldsOfGChart[chart];
-SubVBundlesOfGChart[-chart_Symbol] := -SubVBundlesOfGChart[chart];
+SubVBundlesOfGChart[chart_?GChartQ] := SlotsOfTensor[#][[1]] & /@ SubManifoldsOfGChart[chart];
+SubVBundlesOfGChart[-chart_?GChartQ] := -SubVBundlesOfGChart[chart];
 SyntaxInformation[GChartQ] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[CoordsOfGChart] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[SubManifoldsOfGChart] = {"ArgumentsPattern" -> {_}};
-SyntaxInformation[MetricOfGChart] = {"ArgumentsPattern" -> {_}};
-SyntaxInformation[GChartMetricDecompose] = {"ArgumentsPattern" -> {_, _}};
 SyntaxInformation[VBundleOfGChart] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[SubVBundlesOfGChart] = {"ArgumentsPattern" -> {_}};
+
+MetricOfGChart[_] = None;
+GChartMetricDecompose[_, expr_] := expr;
+SyntaxInformation[MetricOfGChart] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[GChartMetricDecompose] = {"ArgumentsPattern" -> {_, _}};
 
 IndexDimensionOfGChart[chart_?GChartQ] := Length[CoordsOfGChart[chart]] + Length[SubManifoldsOfGChart[chart]];
 SyntaxInformation[IndexDimensionOfGChart] = {"ArgumentsPattern" -> {_}};
@@ -123,7 +118,9 @@ DefGBasis[chart_Symbol, coordBasis_List, subManifolds_List] := Module[
     {params},
     GChartQ[chart] ^= True;
     CoordsOfGChart[chart] ^= {#[[1, 0]], #[[2, 0]], #[[3]]} & /@ coordBasis;
-    SubManifoldsOfGChart[chart] ^= #[[0]] & /@ subManifolds;
+    (* SubManifoldsOfGChart[chart] ^= #[[0]] & /@ subManifolds; *)
+    DecompositionOfGChart[chart] ^= {coordBasis[[All, {1, 2}, 0]], subManifolds[[All, 0]]};
+    PDInfoOfGChart[chart] ^= coordBasis[[All, 3]];
     params = #[[3]] & /@ coordBasis;
     Replace[{e_[i1_Symbol], ed_[-i1_Symbol], param_} :> With[{
         M = BaseOfVBundle@VBundleOfIndex@i1,
@@ -172,13 +169,14 @@ SyntaxInformation[DefGBasis] = {"ArgumentsPattern" -> {_, _, _}};
 
 UndefGBasis[l_List] := UndefGBasis /@ l;
 UndefGBasis[chart_Symbol?GChartQ] := (
-    Apply[{e, ed, param} |-> With[{
+    Apply[{e, ed} |-> With[{
         Q = Symbol[ToString[First@SlotsOfTensor@e] <> "`Q"]
     },
-        param /: PD[-a_Symbol?Q][param] =.;
+        (* TODO: unset the following or remove it from definition *)
+        (* param /: PD[-a_Symbol?Q][param] =.; *)
         UndefTensor /@ {e, ed};
     ], CoordsOfGChart@chart, {1}];
-    UndefTensor /@ SubManifoldsOfGChart@chart;
+    UndefTensor /@ DecompositionOfGChart[chart][[2]];
     Remove@chart;
 );
 SyntaxInformation[UndefGBasis] = {"ArgumentsPattern" -> {___}};
@@ -246,7 +244,7 @@ SyntaxInformation[PostCurvatureTensorCalculation] = {"ArgumentsPattern" -> {_}};
 
 CachedGCTensor[holder_, tensor_][inds___] := CachedGCTensor[holder, tensor, SignOfAIndex /@ {inds}][inds];
 CachedGCTensor[holder_, tensor_, inds_] := (
-    DebugPrint[CachedGCTensor, "calculating tensor ", tensor];
+    xToolsDebugPrint[CachedGCTensor, "calculating tensor ", tensor];
     holder /: CachedGCTensor[holder, tensor, inds] = HeldGCTensor[holder, tensor]
 ) /; inds === SignOfAIndex /@ SlotsOfTensor@tensor;
 CachedGCTensor[holder_, tensor_, inds_] := With[{
@@ -256,7 +254,7 @@ CachedGCTensor[holder_, tensor_, inds_] := With[{
     holder /: CachedGCTensor[holder, tensor, inds] = With[{
         tensor2 = CachedGCTensor[holder, tensor, MapAt[-# &, inds, firstUnmatched]]
     },
-        DebugPrint[CachedGCTensor, "calculating index change ", tensor, inds, " from ", MapAt[-# &, inds, firstUnmatched]];
+        xToolsDebugPrint[CachedGCTensor, "calculating index change ", tensor, inds, " from ", MapAt[-# &, inds, firstUnmatched]];
         GCTensorFixedContract[
             tensor2,
             CachedGCTensor[holder, First@MetricsOfVBundle@slots[[firstUnmatched]], {#, #} &[inds[[firstUnmatched]]]],
@@ -407,7 +405,7 @@ SyntaxInformation[ExpandPDToGCTensor] = {"ArgumentsPattern" -> {_, _.}};
 
 ExpandMetric[chart_?GChartQ][expr_] := ExpandMetric[expr, chart];
 ExpandMetric[expr_, chart_?GChartQ] := With[{metric = MetricOfGChart@chart},
-   expr /. metric[inds__] :> GChartMetricDecompose[chart, metric[inds]]
+   expr /. HoldPattern[metric[inds__]] :> GChartMetricDecompose[chart, metric[inds]]
 ];
 SyntaxInformation[ExpandMetric] = {"ArgumentsPattern" -> {_, _.}};
 
@@ -422,25 +420,28 @@ CompletePerm[perm_, len_] := With[{
     l = Length@perm
 }, If[len > l, Join[perm, Range[l + 1, len]], perm]];
 
-GCTensorDataTranspose[array_, basis_, perms_] := With[{
-    subMStartI = Length[CoordsOfGChart@UpGChart@#] & /@ basis,
+GCArrayTranspose[GCArray[array_, basis_], perms_] := With[{
+    subMStartI = basis[[All, 1]],
     cperms = CompletePerm[perms, Length@basis]
 },
-    If[cperms != Range@Length@basis,
-        MapIndexed[Function[{elem, inds},
-            ETensorTranspose[elem, InversePermutation@Ordering[
-                cperms[[
-                    #[[1]] & /@ Position[inds - subMStartI, _?(# > 0 &), {1}]
+    GCArray[
+        If[cperms != Range@Length@basis,
+            MapIndexed[Function[{elem, inds},
+                ETensorTranspose[elem, InversePermutation@Ordering[
+                    cperms[[
+                        Position[inds - subMStartI, _?(# > 0 &), {1}][[All, 1]]
+                    ]]
                 ]]
-            ]]
-        ], array, {Length@basis}] // Transpose[#, perms] &
-    ,
-        array
+            ], array, {Length@basis}] // Transpose[#, perms] &
+        ,
+            array
+        ],
+        Permute[basis, perms]
     ]
 ];
 
 GCTensorTranspose[GCTensor[array_, basis_], perms_] := (
-    GCTensorDataTranspose[array, basis, perms] // GCTensor[#, Permute[basis, perms]] &
+    GCArrayTranspose[GCTensorToGCArray@GCTensor[array, basis], perms][[1]] // GCTensor[#, Permute[basis, perms]] &
 );
 SyntaxInformation[GCTensorTranspose] = {"ArgumentsPattern" -> {_, _}};
 
@@ -467,17 +468,10 @@ GCTensorDotInner[action_][lhs_, ContractPair[rhs_, len_]] := With[{r1 = Range[-l
 
 GCTensorChangeBasis::invalid = "Cannot change basis with different signs `1` to `2`.";
 GCTensorChangeBasis[GCTensor[arr_, basis_], n_Integer, basis2_] := With[{
-    mat = GetBasisChangeMatrix[basis2, basis[[n]]],
-    clen = Length@CoordsOfGChart@basis2
+    delta1 = DeltaGCTensor[-basis[[n]], basis2]
 },
-    If[SignOfGBasis[basis2] != SignOfGBasis@basis[[n]], Throw@Message[GCTensorChangeBasis::invalid, basis[[n]], basis2]];
-    Map[Function[elem, Inner[
-        GCTensorDotInner[],
-        mat,
-        MapIndexed[ContractPair[#1, If[#2[[1]] > clen, 1, 0]] &, elem],
-        Plus
-    ]], arr, {n - 1}] // GCTensor[#, ReplacePart[basis, n -> basis2]] &
-];
+    GCTensorFixedContract[GCTensor[arr, basis], DeltaGCTensor[-basis[[n]], basis2], n]
+] /; If[SignOfGBasis[basis2] === SignOfGBasis@basis[[n]], True, Message[GCTensorChangeBasis::invalid, basis[[n]], basis2]; False];
 SyntaxInformation[GCTensorChangeBasis] = {"ArgumentsPattern" -> {_, _}};
 
 EnsureGCTensorBasis[GCTensor[arr_, basis_], basis2_List] := Fold[
@@ -493,6 +487,44 @@ SyntaxInformation[EnsureGCTensorBasis] = {"ArgumentsPattern" -> {_, _}};
 UpDownGChartsQ[c_?GChartQ, -c_?GChartQ] = True;
 UpDownGChartsQ[-c_?GChartQ, c_?GChartQ] = True;
 UpDownGChartsQ[_, _] = False;
+
+GCArrayDot[GCArray[arr1_, basis1_], GCArray[arr2_, basis2_], len_, action_] := Module[
+    {coordLengths, a1, a2},
+    coordLengths = basis1[[Length@basis1 - len + 1 ;;, 1]];
+    a1 = If[len > 1, Map[Flatten, arr1, {Length[basis1] - len}], arr1];
+    a2 = MapIndexed[Function[{elem, indices},
+        Map[ContractPair[
+            #,
+            Length@Cases[Thread[indices > coordLengths], True]
+        ] &, elem, {Length@basis2 - len}]
+    ], arr2, {len}] // If[len > 1, Flatten[#, len - 1], #] &;
+    GCArray[
+        Inner[GCTensorDotInner[action], a1, a2, Plus],
+        Join[
+            basis1[[;; Length[basis1] - len]],
+            basis2[[len + 1 ;;]]
+        ]
+    ]
+];
+
+GCArrayContractLast2[GCArray[arr_, basis_], len_, action_] := With[{
+    ccount = basis[[-len ;; -1, 1]]
+},
+    Map[Function[mat,
+        Total[MapIndexed[Function[{subMat, indices},
+            With[{
+                clen = Length@Cases[Thread[indices > ccount], True],
+                elem = subMat[[Sequence @@ indices]]
+            },
+                ETensorContract[elem, Range[-clen, -1], Range[-2 clen, -clen - 1]] //
+                    If[clen > 0, action@#, #] &
+            ]
+        ], mat, {len}], len]
+    ], arr, {Length@basis - 2*len}] // GCArray[#, basis[[;; -2 len - 1]]] &
+];
+
+GCTensorToGCArray[GCTensor[arr_, basis_]] := GCArray[arr, Map[Length, DecompositionOfGChart /@ basis, {2}]];
+SyntaxInformation[GCTensorToGCArray] = {"ArgumentsPattern" -> {_}};
 
 GCTensorDotSameBasis[GCTensor[arr1_, basis1_], GCTensor[arr2_, basis2_], len_, action_] := Module[
     {coordLengths, a1, a2},
@@ -513,65 +545,68 @@ GCTensorDotSameBasis[GCTensor[arr1_, basis1_], GCTensor[arr2_, basis2_], len_, a
     ]
 ];
 
-GCTensorContractTwo::icpbs = "cannot contract incompatible basis `1` and `2`.";
-GCTensorContractTwo::argrx = "Expected 4 or more arguments, `1` found.";
-Options[GCTensorContractTwo] = {PostETensorContract -> Identity};
-GCTensorContractTwo[GCTensor[arr1_, basis1_], GCTensor[arr2_, basis2_], n1_List, n2_List, opt: OptionsPattern[]] := Module[
+Options[GCArrayContractTwo] = {PostETensorContract -> Identity};
+GCArrayContractTwo[GCArray[arr1_, basis1_], GCArray[arr2_, basis2_], n1_List, n2_List, opt: OptionsPattern[]] := Module[
     {d1, d2, perm1, perm2, trans1, trans2},
     d1 = Length@basis1;
     d2 = Length@basis2;
-    MapThread[
-        If[!UpDownGChartsQ[#1, #2], Throw@Message[GCTensorContractTwo::icpbs, #1, #2]] &,
-        {basis1[[n1]], basis2[[n2]]}
-    ];
     perm1 = InversePermutation@Join[Delete[Range@d1, Transpose@{n1}], n1];
     perm2 = InversePermutation@Join[n2, Delete[Range@d2, Transpose@{n2}]];
-    DebugPrint[GCTensorContractTwo, "perm1 = ", perm1, ", perm2 = ", perm2];
-    trans1 = GCTensorTranspose[GCTensor[arr1, basis1], perm1];
-    trans2 = GCTensorTranspose[GCTensor[arr2, basis2], perm2];
-    trans2 = EnsureGCTensorBasis[trans2, Join[ChangeGBasisSign /@ basis1[[n1]], ConstantArray[None, Length@basis2 - Length@n1]]];
-    GCTensorDotSameBasis[trans1, trans2, Length@n1, OptionValue[PostETensorContract]]
+    xToolsDebugPrint[GCArrayContractTwo, "perm1 = ", perm1, ", perm2 = ", perm2];
+    trans1 = GCArrayTranspose[GCArray[arr1, basis1], perm1];
+    trans2 = GCArrayTranspose[GCArray[arr2, basis2], perm2];
+    GCArrayDot[trans1, trans2, Length@n1, OptionValue[PostETensorContract]]
+] /; Length@n1 > 0;
+SyntaxInformation[GCArrayContractTwo] = {"ArgumentsPattern" -> {_, _, _, _, OptionsPattern[]}};
+
+Options[GCArrayContract] = {PostETensorContract -> Identity};
+GCArrayContract[GCArray[arr_, basis_], n1_List, n2_List, opt: OptionsPattern[]] := Module[
+    {d, perm, trans},
+    d = Length@basis;
+    perm = With[{range = Range@d}, InversePermutation@Join[Delete[range, Transpose@{Join[n1, n2]}], range[[Join[n1, n2]]]]];
+    xToolsDebugPrint[GCArrayContract, "perm1 = ", perm];
+    trans = GCArrayTranspose[GCArray[arr, basis], perm];
+    GCArrayContractLast2[GCArrayTranspose[GCArray[arr, basis], perm], Length@n1, OptionValue[PostETensorContract]]
+] /; Length@n1 == Length@n2;
+SyntaxInformation[GCArrayContract] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
+
+GCTensorContractTwo::icpbs = "cannot contract incompatible basis `1` and `2`.";
+GCTensorContractTwo::argrx = "Expected 4 or more arguments, `1` found.";
+Options[GCTensorContractTwo] = Join[Options[GCArrayContractTwo]];
+GCTensorContractTwo[GCTensor[arr1_, basis1_], GCTensor[arr2_, basis2_], n1_List, n2_List, opt: OptionsPattern[]] := GCTensor[
+    GCArrayContractTwo[
+        GCTensorToGCArray@GCTensor[arr1, basis1],
+        GCTensorToGCArray@EnsureGCTensorBasis[GCTensor[arr2, basis2], ReplacePart[
+            ConstantArray[None, Length@basis2],
+            MapThread[#2 -> -basis1[[#1]] &, {n1, n2}]
+        ]],
+        n1, n2, opt
+    ][[1]],
+    Join[Delete[basis1, Transpose@{n1}], Delete[basis2, Transpose@{n2}]]
 ] /; Length@n1 > 0;
 GCTensorContractTwo[t1_GCTensor, t2_GCTensor, {}, {}, opt: OptionsPattern[]] := GCTensorProduct[t1, t2];
 GCTensorContractTwo[args___] = Null /; (
-    DebugPrint[GCTensorContractTwo, "untransformed args: ", {args}];
+    xToolsDebugPrint[GCTensorContractTwo, "untransformed args: ", {args}];
     Message[GCTensorContractTwo::argrx, Length@{args}];
     False
 );
 SyntaxInformation[GCTensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _, OptionsPattern[]}};
 
-GCTensorContractLast2SameBasis[GCTensor[arr_, basis_], len_, action_] := With[{
-    ccount = Length@CoordsOfGChart@UpGChart@# & /@ basis[[-len ;; -1]]
-},
-    Map[Function[mat,
-        Total[MapIndexed[Function[{subMat, indices},
-            With[{
-                clen = Length@Cases[Thread[indices > ccount], True],
-                elem = subMat[[Sequence @@ indices]]
-            },
-                ETensorContract[elem, Range[-clen, -1], Range[-2 clen, -clen - 1]] //
-                    If[clen > 0, action@#, #] &
-            ]
-        ], mat, {len}], len]
-    ], arr, {Length@basis - 2*len}] // GCTensor[#, basis[[;; -2 len - 1]]] &
-];
-
 GCTensorContract::icpbs = "cannot contract incompatible basis `1` and `2`.";
-Options[GCTensorContract] = {PostETensorContract -> Identity};
-GCTensorContract[GCTensor[arr_, basis_], n1_List, n2_List, opt: OptionsPattern[]] := Module[
-    {d, perm, trans},
-    d = Length@basis;
-    MapThread[If[!UpDownGChartsQ[#1, #2], Throw@Message[GCTensorContract::icpbs, #1, #2]] &, {basis[[n1]], basis[[n2]]}];
-    perm = With[{range = Range@d}, InversePermutation@Join[Delete[range, Transpose@{Join[n1, n2]}], range[[Join[n1, n2]]]]];
-    DebugPrint[GCTensorContract, "perm1 = ", perm];
-    trans = GCTensorTranspose[GCTensor[arr, basis], perm];
-    trans = EnsureGCTensorBasis[trans, Join[ConstantArray[None, Length@basis - Length@n1], ChangeGBasisSign /@ basis[[n1]]]];
-    GCTensorContractLast2SameBasis[trans, Length@n1, OptionValue[PostETensorContract]]
-] /; Length@n1 == Length@n2;
-GCTensorContract[args___] := (
-    DebugPrint[GCTensorContract, "untransformed args: ", {args}];
-    Hold@GCTensorContract[args]
-);
+Options[GCTensorContract] = Options[GCArrayContract];
+GCTensorContract[GCTensor[arr_, basis_], n1_List, n2_List, opt: OptionsPattern[]] := With[{
+    check = Length@n1 == Length@n2 && And @@ MapThread[If[!UpDownGChartsQ[#1, #2], Message[GCTensorContract::icpbs, #1, #2]; False, True] &, {basis[[n1]], basis[[n2]]}]
+},
+    GCTensor[
+        GCArrayContract[
+            GCTensorToGCArray@EnsureGCTensorBasis[
+                GCTensor[arr, basis],
+                ReplacePart[ConstantArray[None, Length@basis], MapThread[#2 -> -basis[[#1]] &, {n1, n2}]]
+            ], n1, n2, opt
+        ][[1]],
+        Delete[basis, Transpose@{Join[n1, n2]}]
+    ] /; check
+];
 SyntaxInformation[GCTensorContract] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
 
 Options[GCTensorFixedContract] = Options@GCTensorContractTwo;
@@ -630,7 +665,7 @@ SyntaxInformation[ZeroGCTensorQ] = {"ArgumentsPattern" -> {_}};
 
 AIndexToPattern[a_Symbol] := Pattern[a, Blank[]];
 AIndexToPattern[-a_Symbol] := -Pattern[a, Blank[]];
-CoordParamsOfGChart[chart_] := #3 & @@@ CoordsOfGChart@UpGChart@chart;
+CoordParamsOfGChart[chart_] := PDInfoOfGChart@chart;
 GCTensorElementToRule[elem_, indices_, cparams_, head_] := (
     (HoldPattern[head[##]] & @@ MapThread[Part, {cparams, indices}]) -> elem
 ) /; And @@ Thread[indices <= Length /@ cparams];
@@ -714,7 +749,7 @@ GCTensor /: x_?xTools`xTension`Private`IndexedScalarQ * GCTensor[arr_, basis_] :
 GCTensor /: GCTensor[arr1_, basis1_][inds1__] + GCTensor[arr2_, basis2_][inds2__] := With[{
     perm = PermutationProduct[InversePermutation@Ordering@{inds2}, Ordering@{inds1}]
 },
-    GCTensor[arr1 + GCTensorDataTranspose[arr2, basis2, perm], basis1][inds1]
+    GCTensor[arr1 + GCArrayTranspose[GCTensorToGCArray@GCTensor[arr2, basis2], perm][[1]], basis1][inds1]
 ] /; Sort@{inds1} === Sort@{inds2} && basis1 === Permute[basis2, PermutationProduct[InversePermutation@Ordering@{inds2}, Ordering@{inds1}]];
 
 GCTensor /: x_?xAct`xTensor`Private`NonIndexedScalarQ * GCTensor[arr_, basis_][inds__] := GCTensor[arr * x, basis][inds];
@@ -768,7 +803,7 @@ CreateGCTensor[{components___}, charts_] := Module[
 ];
 SyntaxInformation[CreateGCTensor] = {"ArgumentsPattern" -> {_, _}};
 
-DeltaGCTensor[chart_?GChartQ, il: Alternatives[{1, -1}, {-1, 1}]] := With[{
+DeltaGCTensorSameBasis[chart_?GChartQ, il: Alternatives[{1, -1}, {-1, 1}]] := With[{
     clen = Length@CoordsOfGChart@chart,
     subvbs = SubVBundlesOfGChart@chart,
     len = IndexDimensionOfGChart@chart
@@ -789,8 +824,17 @@ DeltaGCTensor[chart_?GChartQ, il: Alternatives[{1, -1}, {-1, 1}]] := With[{
         ]
     ] // GCTensor[#, chart * il] &
 ];
-DeltaGCTensor[chart_?GChartQ][a_Symbol, -b_Symbol] := DeltaGCTensor[chart, {1, -1}][a, -b];
-DeltaGCTensor[chart_?GChartQ][-a_Symbol, b_Symbol] := DeltaGCTensor[chart, {-1, 1}][-a, b];
+MakeBasisChangeDeltaGCTensor[b1_, b2_] := GCTensor[Outer[
+    ETensorContractTwo[#1, #2, {-1}, {-1}] &,
+    GetBasisETensorsOfGChart[b1],
+    GetBasisETensorsOfGChart[b2]
+], {b1, b2}];
+DeltaGCTensor[chart_?GChartQ][a_Symbol, -b_Symbol] := DeltaGCTensorSameBasis[chart, {1, -1}][a, -b];
+DeltaGCTensor[chart_?GChartQ][-a_Symbol, b_Symbol] := DeltaGCTensorSameBasis[chart, {-1, 1}][-a, b];
+DeltaGCTensor[chart_?GChartQ, -chart_?GChartQ] := DeltaGCTensorSameBasis[chart, {1, -1}];
+DeltaGCTensor[-chart_?GChartQ, chart_?GChartQ] := DeltaGCTensorSameBasis[chart, {-1, 1}];
+DeltaGCTensor[chart1_?GChartQ, -chart2_?GChartQ] := MakeBasisChangeDeltaGCTensor[chart1, -chart2];
+DeltaGCTensor[-chart1_?GChartQ, chart2_?GChartQ] := MakeBasisChangeDeltaGCTensor[-chart1, chart2];
 SyntaxInformation[DeltaGCTensor] = {"ArgumentsPattern" -> {_, _.}};
 
 GCTensorPDGrad[chart_][expr_] := GCTensorPDGrad[expr, chart];
@@ -827,7 +871,7 @@ GCTensorPDDiv[GCTensor[arr_, basis_], n_Integer, -chart2_?GChartQ] := With[{
         ConstantArray[ETensorPDDiv[-1], Length@SubManifoldsOfGChart@chart2]
     ],
     len = Length@chart2,
-    arr2 = GCTensorDataTranspose[arr, basis, MoveTo[n, Length@basis]]
+    arr2 = GCArrayTranspose[GCTensorToGCArray@GCTensor[arr, basis], MoveTo[n, Length@basis]][[1]]
 },
     Map[Function[elem,
         Total@MapThread[#1@#2 &, {ops, elem}]
@@ -931,7 +975,7 @@ OptimizedGCTensorContraction[l_List, opt___] := Module[
         If[Length@contractions > 0,
             contractionCounts = #[[1]] & /@ contractions;
             selected = contractions[[FirstPosition[contractionCounts, Min@contractionCounts][[1]]]];
-            DebugPrint[OptimizedGCTensorContraction, "selected: ", ShowContraction[selected, l]];
+            xToolsDebugPrint[OptimizedGCTensorContraction, "selected: ", ShowContraction[selected, l]];
             {res, l2} = ExecuteContraction[selected, l, opt];
             OptimizedGCTensorContraction[Append[l2, res], opt]
         ,
@@ -993,27 +1037,6 @@ ContractGCTensors[expr_Times, covd_, opt___] := With[
 ];
 
 SyntaxInformation[ContractGCTensors] = {"ArgumentsPattern" -> {_, _., OptionsPattern[]}};
-
-RecoverOneRiemannETensor[ETensor[expr_, {-a_Symbol, -b_Symbol, -c_Symbol, -d_Symbol}]] := Module[
-    {vb, cd, chris, riem, rep, rule},
-    vb = VBundleOfIndex@a;
-    cd = CovDOfMetric@First@MetricsOfVBundle@vb;
-    chris = Christoffel[cd][a, -b, -c][[0]];
-    riem = Riemann@cd;
-    rep = ChangeCurvature[riem[-a, -b, -c, d], cd] - riem[-a, -b, -c, d] + PD[-a][chris[d, -b, -c]];
-    rule = {
-        PD[-a]@chris[d_Symbol, -b, -c] :> Module[#1, #2],
-        PD[-a]@chris[d_Symbol, -c, -b] :> Module[#1, #2]
-    } &[Union[List @@ (UpIndex /@ FindDummyIndices@Evaluate@rep)], rep];
-    ETensor[expr /. rule, {-a, -b, -c, -d}]
-];
-RecoverSubRiemannTensors[GCTensor[arr_, {-chart_?GChartQ, -chart_, -chart_, -chart_}]] := Module[
-    {clen, mlen},
-    clen = Length@CoordsOfGChart@chart;
-    mlen = Length@SubManifoldsOfGChart@chart;
-    MapAt[RecoverOneRiemannETensor, arr, {#, #, #, #} & /@ Range[clen + 1, clen + mlen]] // GCTensor[#, -{chart, chart, chart, chart}] &
-];
-SyntaxInformation[RecoverSubRiemannTensors] = {"ArgumentsPattern" -> {_}};
 
 On[RuleDelayed::rhs];
 
