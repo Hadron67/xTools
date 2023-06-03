@@ -3,11 +3,14 @@ BeginPackage["xTools`xDecomp`", {"xAct`xCore`", "xAct`xTensor`", "xTools`xTensio
 (Unprotect[#]; ClearAll[#];) & /@ Names@{"`*", "`*"};
 
 GChartQ::usage = "GChartQ[chart] gives True if chart is a generalized chart.";
-DecompositionOfGChart::usage = "DecompositionOfGChart[chart] returns the form {coords, submanifolds}";
+DecompositionOfGChart::usage = "DecompositionOfGChart[chart] returns the form {n, {TangentM1, ...}}";
+DecompositionOfSignedGChart::usage = "DecompositionOfSignedGChart[chart] is similar to DecompositionOfGChart[chart] but the subvbundles are signed accordingly.";
 DimensionLabelsOfGChart::usage = "DimensionLabelsOfGChart[chart] returns the labels of each 1D submanifold of chart, used in e.g. CreateGCTensor.";
+PDGChartInfo::usage = "PDGChartInfo[{p1, p2, ...}, {TM1, TM2, ...}, GCArray[...]] represents a PD object.";
 PDInfoOfGChart::usage = "PDInfoOfGChart[chart] returns information for computing the partial derivative in the chart.";
-CoordsOfGChart::usage = "CoordsOfGChart[chart] gives single-variable coordinate list of the generalized chart, each element is in the form {e, ed, param}."
-SubManifoldsOfGChart::usage = "SubManifoldsOfGChart[chart] gives a list of basis tensors of the generalized chart.";
+BasisOfGChart::usage = "BasisOfGChart[chart] returns the basis vectors of the chart, in the form {{{et, edt}, ...}, {eX, ...}}.";
+CoordBasisOfGChart::usage = "CoordBasisOfGChart[chart] gives single-variable coordinate list of the generalized chart, each element is in the form {e, ed, param}."
+SubManifoldBasisOfGChart::usage = "SubManifoldBasisOfGChart[chart] gives a list of basis tensors of the generalized chart.";
 MetricOfGChart::usage = "MetricOfGChart[chart] gives the metric of generalized chart, if defined."
 GChartMetricDecompose::usage = "GChartMetricDecompose[chart, metric[-a, -b]] decomposes the metric using the defined metric decomposition rule.";
 VBundleOfGChart::usage = "VBundleOfGChart[chart] gives the base VBundle of the generalized chart.";
@@ -17,6 +20,7 @@ GetBasisETensorsOfGChart::usage = "GetBasisETensorsOfGChart[chart] gives a list 
 
 DefGBasis::usage = "DefGBasis[chart, {{e, ed, param}...}, {eT...}] defines a generalized chart with coodinate basis and sub manifolds."
 UndefGBasis::usage = "UndefGBasis[chart] undefines a generalized chart.";
+DefGChart::usage = "DefGBasis[chart, {coordCount, subCount}] is a lightweight version of DefGBasis, where only coordinate and submanifold count are required.";
 SetGChartMetric::usage = "SetGChartMetric[chart, metric, metricValue, metricInvValue] defines metric decomposition rule for metric.";
 
 GetAllHeldTensors::usage = "GetAllCachedTensors[holder] gives a list of tensors that has a definition with the holder.";
@@ -60,6 +64,9 @@ PostETensorContract::usage = "PostETensorContract is an option of GCTensorContra
 GCTensorToGCArray::usage = "GCTensorToGCArray[GCTensor[...]] converts the GCTensor into GCArray.";
 GCArrayContract::usage = "GCArrayContract[T, n1, n2] contracts the n1 axis with n2 axis of T";
 GCArrayContractTwo::usage = "GCArrayContractTwo[T1, T2, n1, n2] computes the tensor product of two arrays and then contracts n1 axes of T1 with n2 axes of T2.";
+IdentityGCArray::usage = "IdentityGCArray[cLen, {TM1, ...}, {1, -1}] or IdentityGCArray[cLen, {TM1, ...}, {-1, 1}] returns an identity GCArray.";
+GCArrayFromSparse::usage = "GCArrayFromSparse[{{...} -> ...}, {...}] initialize a GCArray from sparse notation.";
+GCTensorFromSparse::usage = "GCTensorFromSparse[{{...} -> ...}, {chart1, ...}] initialize a GCTensor from sparse notation.";
 
 GCTensorToComponentRules::usage = "GCTensorToComponentRules[T, head] converts GCTensor to a list of component rules.";
 HeadOfCoordinateIndex::usage = "HeadOfCoordinateIndex is an option of GCTensorToComponentRules that defines the head used for coordinate indices. Default is LI.";
@@ -84,21 +91,29 @@ Begin["`Private`"];
 Off[RuleDelayed::rhs];
 
 DecompositionOfGChart::undef = "GChart `1` is undefined.";
+BasisOfGChart::undef = "GChart `1` has no defined basis.";
 GChartQ[_] = False;
 DecompositionOfGChart[a_] := (Message[DecompositionOfGChart::undef, a]; None);
 DecompositionOfGChart[-a_?GChartQ] := DecompositionOfGChart[a];
+DecompositionOfSignedGChart[a_?GChartQ] := DecompositionOfGChart[a];
+DecompositionOfSignedGChart[-a_?GChartQ] := With[{d = DecompositionOfGChart[a]}, {d[[1]], -d[[2]]}];
 DimensionLabelsOfGChart[_] = {};
 DimensionLabelsOfGChart[-a_?GChartQ] := DimensionLabelsOfGChart[a];
+BasisOfGChart[a_] := (Message[BasisOfGChart::undef, a]; {});
+BasisOfGChart[-a_?GChartQ] := BasisOfGChart[a];
 PDInfoOfGChart[_] = None;
 PDInfoOfGChart[-a_?GChartQ] := PDInfoOfGChart[a];
-CoordsOfGChart[a_] := DecompositionOfGChart[a][[1]];
-SubManifoldsOfGChart[a_] := DecompositionOfGChart[a][[2]];
-VBundleOfGChart[chart_] := First@SlotsOfTensor@CoordsOfGChart[chart][[1, 1]];
-SubVBundlesOfGChart[chart_?GChartQ] := SlotsOfTensor[#][[1]] & /@ SubManifoldsOfGChart[chart];
+CoordsCountOfGChart[a_] := DecompositionOfGChart[a][[1]];
+SubVBundlesOfGChart[chart_?GChartQ] := DecompositionOfGChart[chart][[2]];
 SubVBundlesOfGChart[-chart_?GChartQ] := -SubVBundlesOfGChart[chart];
+CoordBasisOfGChart[a_] := BasisOfGChart[a][[1]];
+SubManifoldBasisOfGChart[a_] := BasisOfGChart[a][[2]];
+VBundleOfGChart[-chart_?GChartQ] := VBundleOfGChart[chart];
 SyntaxInformation[GChartQ] = {"ArgumentsPattern" -> {_}};
-SyntaxInformation[CoordsOfGChart] = {"ArgumentsPattern" -> {_}};
-SyntaxInformation[SubManifoldsOfGChart] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[DecompositionOfGChart] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[DecompositionOfSignedGChart] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[CoordBasisOfGChart] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[SubManifoldBasisOfGChart] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[VBundleOfGChart] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[SubVBundlesOfGChart] = {"ArgumentsPattern" -> {_}};
 
@@ -107,7 +122,7 @@ GChartMetricDecompose[_, expr_] := expr;
 SyntaxInformation[MetricOfGChart] = {"ArgumentsPattern" -> {_}};
 SyntaxInformation[GChartMetricDecompose] = {"ArgumentsPattern" -> {_, _}};
 
-IndexDimensionOfGChart[chart_?GChartQ] := Length[CoordsOfGChart[chart]] + Length[SubManifoldsOfGChart[chart]];
+IndexDimensionOfGChart[chart_?GChartQ] := DecompositionOfGChart[chart][[1]] + Length@DecompositionOfGChart[chart][[2]];
 SyntaxInformation[IndexDimensionOfGChart] = {"ArgumentsPattern" -> {_}};
 
 ChangeGBasisSign[a_?GChartQ] := -a;
@@ -119,8 +134,10 @@ DownGBasisQ[-_?GChartQ] = True;
 DefGBasis[chart_Symbol, coordBasis_List, subManifolds_List] := Module[
     {params},
     GChartQ[chart] ^= True;
+    VBundleOfGChart[chart] ^= VBundleOfIndex@subManifolds[[1, 2]];
     DimensionLabelsOfGChart[chart] ^= coordBasis[[All, 3]];
-    DecompositionOfGChart[chart] ^= {coordBasis[[All, {1, 2}, 0]], subManifolds[[All, 0]]};
+    DecompositionOfGChart[chart] ^= {Length@coordBasis, VBundleOfIndex@#[[1]] & /@ subManifolds};
+    BasisOfGChart[chart] ^= {coordBasis[[All, {1, 2}, 0]], subManifolds[[All, 0]]};
     params = #[[3]] & /@ coordBasis;
     Replace[{e_[i1_Symbol], ed_[-i1_Symbol], param_} :> With[{
         M = BaseOfVBundle@VBundleOfIndex@i1,
@@ -164,7 +181,7 @@ DefGBasis[chart_Symbol, coordBasis_List, subManifolds_List] := Module[
         t1 /: t1[_, -a_Symbol] t2[_, a_Symbol] = 0;
         ] & /@ subManifolds[[idx + 1 ;;]];
     ] &, subManifolds];
-    PDInfoOfGChart[chart] ^= {coordBasis[[All, 3]], First@SlotsOfTensor@Head@# & /@ subManifolds, GCTensorToGCArray@DeltaGCTensor[-chart, chart]};
+    PDInfoOfGChart[chart] ^= PDGChartInfo[coordBasis[[All, 3]], SubVBundlesOfGChart@chart];
 ];
 SyntaxInformation[DefGBasis] = {"ArgumentsPattern" -> {_, _, _}};
 
@@ -176,11 +193,26 @@ UndefGBasis[chart_Symbol?GChartQ] := (
         (* TODO: unset the following or remove it from definition *)
         (* param /: PD[-a_Symbol?Q][param] =.; *)
         UndefTensor /@ {e, ed};
-    ], CoordsOfGChart@chart, {1}];
+    ], CoordBasisOfGChart@chart, {1}];
     UndefTensor /@ DecompositionOfGChart[chart][[2]];
     Remove@chart;
 );
 SyntaxInformation[UndefGBasis] = {"ArgumentsPattern" -> {___}};
+
+DefGChart[chart_Symbol, vb_, {clen_, subs_}] := (
+    GChartQ[chart] ^= True;
+    VBundleOfGChart[chart] ^= vb;
+    DecompositionOfGChart[chart] ^= {clen, subs};
+    DimensionLabelsOfGChart[chart] ^= Range[Length@clen + Length@subs];
+);
+DefGChart[chart_, vb_, li_, pd_PDGChartInfo] := (
+    DefGChart[chart, vb, li];
+    PDInfoOfGChart[chart] ^= pd;
+);
+SyntaxInformation[DefGChart] = {"ArgumentsPattern" -> {_, _, _, _.}};
+
+PDGChartInfo[params_, subs_] := PDGChartInfo[params, subs, IdentityGCArray[Length@params, subs, {-1, 1}]];
+SyntaxInformation[PDGChartInfo] = {"ArgumentsPattern" -> {_, _.}};
 
 IndexToPattern[idx_Symbol] := Pattern[idx, Blank[]];
 IndexToPattern[-idx_Symbol] := -Pattern[idx, Blank[]];
@@ -201,18 +233,18 @@ SyntaxInformation[SetGChartMetric] = {"ArgumentsPattern" -> {_, _, _, _}};
 GetBasisETensorsOfGChart[chart_?GChartQ] := With[{
     ai = First@GetIndicesOfVBundle[VBundleOfGChart@chart, 1]
 }, Join[
-    ETensor[#[[1]][ai], {ai}] & /@ CoordsOfGChart@chart,
+    ETensor[#[[1]][ai], {ai}] & /@ CoordBasisOfGChart@chart,
     With[{bi = First@GetIndicesOfVBundle[First@SlotsOfTensor@#, 1]},
         ETensor[#[-bi, ai]]
-    ] & /@ SubManifoldsOfGChart@chart
+    ] & /@ SubManifoldBasisOfGChart@chart
 ]];
 GetBasisETensorsOfGChart[-chart_?GChartQ] := With[{
     ai = First@GetIndicesOfVBundle[VBundleOfGChart@chart, 1]
 }, Join[
-    ETensor[#[[2]][-ai], {-ai}] & /@ CoordsOfGChart@chart,
+    ETensor[#[[2]][-ai], {-ai}] & /@ CoordBasisOfGChart@chart,
     With[{bi = First@GetIndicesOfVBundle[First@SlotsOfTensor@#, 1]},
         ETensor[#[bi, -ai]]
-    ] & /@ SubManifoldsOfGChart@chart
+    ] & /@ SubManifoldBasisOfGChart@chart
 ]];
 SyntaxInformation[GetBasisETensorsOfGChart] = {"ArgumentsPattern" -> {_}};
 
@@ -354,7 +386,7 @@ SyntaxInformation[AddCurvatureTensorsToHolder] = {"ArgumentsPattern" -> {_, _, _
 
 SortGChartParamD[chart_][expr_] := SortGChartParamD[expr, chart];
 SortGChartParamD[expr_, chart_] := With[{
-    rules = (HoldPattern[ParamD[l___, #3, r___]@PD[-a_Symbol]@A_] :> ParamD[l, r]@PD[-a]@ParamD[#3]@A) & @@@ CoordsOfGChart@chart
+    rules = (HoldPattern[ParamD[l___, #3, r___]@PD[-a_Symbol]@A_] :> ParamD[l, r]@PD[-a]@ParamD[#3]@A) & @@@ CoordBasisOfGChart@chart
 }, expr //. rules];
 SyntaxInformation[SortGChartParamD] = {"ArgumentsPattern" -> {_, _.}};
 
@@ -386,11 +418,11 @@ ExpandPDToBasis[expr_, chart_?GChartQ] := Module[
     {vb, a, A, replacement1, replacement2, rule},
     vb = VBundleOfGChart@chart;
     a = GetIndicesOfVBundle[vb, 1][[1]];
-    replacement1[a_, A_] = Plus @@ (ParamD[#[[3]]][A] #[[2]][-a] & /@ CoordsOfGChart[chart]);
+    replacement1[a_, A_] = Plus @@ (ParamD[#[[3]]][A] #[[2]][-a] & /@ CoordBasisOfGChart[chart]);
     replacement2[a_, A_] = With[{
         i1 = GetIndicesOfVBundle[First@SlotsOfTensor@#, 1][[1]],
         e1 = #
-    }, {{i1}, e1[i1, -a] PD[-i1][A]}] & /@ SubManifoldsOfGChart[chart];
+    }, {{i1}, e1[i1, -a] PD[-i1][A]}] & /@ SubManifoldBasisOfGChart[chart];
     rule = With[{
         Q = Symbol[ToString[vb] <> "`Q"]
     }, PD[-a_Symbol?Q][A_] :> replacement1[a, A] + Plus @@ Module @@@ replacement2[a, A]];
@@ -516,7 +548,7 @@ GCArrayContractLast2[GCArray[arr_, basis_], len_, action_] := With[{
     ], arr, {Length@basis - 2*len}] // GCArray[#, basis[[;; -2 len - 1]]] &
 ];
 
-GChartListToGCArrayMeta[basis_] := Map[Length, DecompositionOfGChart /@ basis, {2}];
+GChartListToGCArrayMeta[basis_] := With[{d = DecompositionOfGChart@#}, {d[[1]], Length@d[[2]]}] & /@ basis;
 GCTensorToGCArray[GCTensor[arr_, basis_]] := GCArray[arr, GChartListToGCArrayMeta@basis];
 SyntaxInformation[GCTensorToGCArray] = {"ArgumentsPattern" -> {_}};
 
@@ -605,12 +637,12 @@ GCTensorFixedContract[GCTensor[arr_, basis_], metric_GCTensor, n_, opt: OptionsP
 SyntaxInformation[GCTensorFixedContract] = {"ArgumentsPattern" -> {_, _, _, OptionsPattern[]}};
 
 BasisETensorsFromSignedBasis[basis_Symbol] := Join[
-    ToETensor@#[[1]] & /@ CoordsOfGChart@basis,
-    ToETensor[#, {-1, 1}] & /@ SubManifoldsOfGChart@basis
+    ToETensor@#[[1]] & /@ CoordBasisOfGChart@basis,
+    ToETensor[#, {-1, 1}] & /@ SubManifoldBasisOfGChart@basis
 ];
 BasisETensorsFromSignedBasis[-basis_Symbol] := Join[
-    ToETensor@#[[2]] & /@ CoordsOfGChart@basis,
-    ToETensor[#, {1, -1}] & /@ SubManifoldsOfGChart@basis
+    ToETensor@#[[2]] & /@ CoordBasisOfGChart@basis,
+    ToETensor[#, {1, -1}] & /@ SubManifoldBasisOfGChart@basis
 ];
 MoveIndicesOfVBundleToLeft[ETensor[expr_, inds_], vb_] := With[{
     pos = # & @@@ Position[vb === (VBundleOfIndex@#) & /@ inds, True, {1}]
@@ -620,7 +652,7 @@ MoveIndicesOfVBundleToLeft[ETensor[expr_, inds_], vb_] := With[{
 ]];
 GCTensorToBasis[GCTensor[arr_, basis_]] := With[{
     bTensors = BasisETensorsFromSignedBasis /@ basis,
-    clens = Length@CoordsOfGChart@UpGChart@# & /@ basis,
+    clens = CoordsCountOfGChart@UpGChart@# & /@ basis,
     vb = VBundleOfGChart@UpGChart@First@basis
 }, MapIndexed[Function[{elem, indices},
     ETensorContractTwo[
@@ -749,7 +781,7 @@ GCArray /: GCArray[arr1_, basis_] + GCArray[arr2_, basis_] := GCArray[arr1 + arr
 GCArray /: x_?xTools`xTension`Private`IndexedScalarQ * GCArray[arr_, basis_] := GCArray[arr * x, basis];
 
 ValidateGCTensor[GCTensor[arr_, basis_]] := With[{
-    subMs = SubManifoldsOfGChart@UpGChart@# & /@ basis,
+    subMs = SubManifoldBasisOfGChart@UpGChart@# & /@ basis,
     pms = If[MatchQ[#, _Symbol], 1, -1] & /@ basis
 }];
 SyntaxInformation[ValidateGCTensor] = {"ArgumentsPattern" -> {_}};
@@ -768,7 +800,7 @@ PartSpecFromComponentSpec[spec_List, params_, subVBundles_] := MapThread[
         Length@p + FirstPosition[v, SignedVBundleOfIndex@s][[1]]
     ]]
 , {spec, params, subVBundles}];
-InitGCTensorElement[clens_, subVBundles_][indices__] := ZeroETensor@MapThread[PartOrNone, {subVBundles, {indices} - clens}];
+InitGCArrayElement[clens_, subVBundles_][indices__] := ZeroETensor@MapThread[PartOrNone, {subVBundles, {indices} - clens}];
 AddGCTensorElement[params_, subVBundles_][arr_, spec_List -> expr_] := Module[
     {inds, ainds, elem},
     inds = PartSpecFromComponentSpec[spec, params, subVBundles];
@@ -788,20 +820,30 @@ CreateGCTensor[{components___}, charts_] := Module[
     subVBundles = SubVBundlesOfGChart /@ charts;
     ret = Fold[
         AddGCTensorElement[params, subVBundles],
-        Array[InitGCTensorElement[Length /@ params, subVBundles], (Length /@ params) + (Length /@ subVBundles)],
+        Array[InitGCArrayElement[Length /@ params, subVBundles], (Length /@ params) + (Length /@ subVBundles)],
         {components}
     ];
     GCTensor[ret, charts]
 ];
 SyntaxInformation[CreateGCTensor] = {"ArgumentsPattern" -> {_, _}};
 
-DeltaGCTensorSameBasis[chart_?GChartQ, il: Alternatives[{1, -1}, {-1, 1}]] := With[{
-    clen = Length@CoordsOfGChart@chart,
-    subvbs = SubVBundlesOfGChart@chart,
-    len = IndexDimensionOfGChart@chart
-},
+GCArrayFromSparse[elems_, basis_] := GCArray[
     ReplacePart[
-        Array[InitGCTensorElement[{clen, clen}, il * {subvbs, subvbs}], {len, len}],
+        Array[InitGCArrayElement[basis[[All, 1]], basis[[All, 2]]], #1 + Length@#2 & @@@ basis],
+        elems
+    ], {#1, Length@#2} & @@@ basis
+];
+SyntaxInformation[GCArrayFromSparse] = {"ArgumentsPattern" -> {_, _}};
+
+GCTensorFromSparse[elem_, basis_] := GCTensor[GCArrayFromSparse[elem, DecompositionOfSignedGChart /@ basis][[1]], basis];
+SyntaxInformation[GCTensorFromSparse] = {"ArgumentsPattern" -> {_, _}};
+
+IdentityGCArray[clen_, subvbs_, il: Alternatives[{1, -1}, {-1, 1}]] := With[{
+    len = clen + Length@subvbs,
+    l = {clen, Length@subvbs}
+}, GCArray[
+    ReplacePart[
+        Array[InitGCArrayElement[{clen, clen}, il * {subvbs, subvbs}], {len, len}],
         Join[
             ({#, #} -> 1) & /@ Range@clen,
             MapIndexed[
@@ -814,7 +856,14 @@ DeltaGCTensorSameBasis[chart_?GChartQ, il: Alternatives[{1, -1}, {-1, 1}]] := Wi
                 subvbs
             ]
         ]
-    ] // GCTensor[#, chart * il] &
+    ],
+    {l, l}
+]];
+SyntaxInformation[IdentityGCArray] = {"ArgumentsPattern" -> {_, _, _}};
+
+DeltaGCTensorSameBasis[chart_?GChartQ, il: Alternatives[{1, -1}, {-1, 1}]] := GCTensor[
+    IdentityGCArray[CoordsCountOfGChart@chart, SubVBundlesOfGChart@chart, il][[1]],
+    chart * il
 ];
 MakeBasisChangeDeltaGCTensor[b1_, b2_] := GCTensor[Outer[
     ETensorContractTwo[#1, #2, {-1}, {-1}] &,
@@ -832,7 +881,7 @@ SyntaxInformation[DeltaGCTensor] = {"ArgumentsPattern" -> {_, _.}};
 GCTensorPDGrad[chart_][expr_] := GCTensorPDGrad[expr, chart];
 GCTensorPDGrad[expr_Plus, chart_] := GCTensorPDGrad[chart] /@ expr;
 GCTensorPDGrad[expr_, -chart_?GChartQ] := GCTensorPDGrad[expr, -chart, PDInfoOfGChart@chart];
-GCTensorPDGrad[GCTensor[arr_, basis_], -chart_?GChartQ, {coords_, subs_, mat_}] := With[{
+GCTensorPDGrad[GCTensor[arr_, basis_], -chart_?GChartQ, PDGChartInfo[coords_, subs_, mat_]] := With[{
     ops = Join[ParamD /@ coords, ETensorPDGrad /@ subs]
 }, GCTensor[
     GCArrayContractTwo[
@@ -846,7 +895,7 @@ GCTensorPDGrad[GCTensor[arr_, basis_], -chart_?GChartQ, {coords_, subs_, mat_}] 
     ][[1]],
     Append[basis, -chart]
 ]];
-GCTensorPDGrad[scalar_, -chart_?GChartQ, {coords_, subs_, mat_}] := With[{
+GCTensorPDGrad[scalar_, -chart_?GChartQ, PDGChartInfo[coords_, subs_, mat_]] := With[{
     ops = Join[ParamD /@ coords, ETensorPDGrad /@ subs]
 }, GCTensor[
     GCArrayContractTwo[

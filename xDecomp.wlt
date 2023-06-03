@@ -4,13 +4,15 @@ $DefInfoQ = False;
 
 DefConstantSymbol[dimx];
 DefParameter /@ {r, t};
+r /: PD[_]@r = 0;
+t /: PD[_]@t = 0;
 DefScalarFunction /@ {h, f, Pn};
 DefManifold[Mf, dimx + 2, IndexRangeNS[Mf`A, Mf`H]];
 DefManifold[Mx, dimx, IndexRangeNS[Mx`a, Mx`h]];
 DefMetric[NoSignDet, metricMf[-Mf`A, -Mf`B], CDMf];
 DefMetric[NoSignDet, metricMx[-Mx`a, -Mx`b], CDMx];
 
-DefGBasis[decomp, {{et[Mf`A], edt[-Mf`A], t}, {er[Mf`A], edr[-Mf`A], r}}, {eX[Mx`a, -Mf`A]}];
+DefGChart[decomp, TangentMf, {2, {TangentMx}}, PDGChartInfo[{t, r}, {TangentMx}]];
 DefTensor[n0[Mf`A], {Mf, r}];
 DefTensor[n1[Mf`A], {Mf, r}];
 DefTensor[v0[Mx`a], {Mx, r}];
@@ -18,22 +20,23 @@ DefTensor[phi0[], {Mf, r, t}];
 
 DefConstantSymbol[L0];
 DefParameter[r2];
+r2 /: PD[_]@r2 = 0;
 DefManifold[Mr, dimx, IndexRangeNS[Mr`a, Mr`h]];
 DefMetric[NoSignDet, metricMr[-Mr`a, -Mr`b], CDMr, OtherDependencies -> {r2}];
-DefGBasis[fgc, {{er2[Mf`A], edr2[-Mf`A], r2}}, {eR[Mr`a, -Mf`A]}];
+DefGChart[fgc, TangentMf, {1, {TangentMr}}, PDGChartInfo[{r2}, {TangentMr}]];
 
 MUnit`BeginTestSection["Decomposing SSS metric ansatze"];
 
-metricVal = CreateGCTensor[{
-    {-t, -t} -> -h[r],
-    {-r, -r} -> 1 / f[r],
-    {-Mx`a, -Mx`b} -> r^2 metricMx[-Mx`a, -Mx`b]
+metricVal = GCTensorFromSparse[{
+    {1, 1} -> -h[r],
+    {2, 2} -> 1 / f[r],
+    {3, 3} -> ETensor[r^2 metricMx[-Mx`a, -Mx`b]]
 }, -{decomp, decomp}];
 
-metricInvVal = CreateGCTensor[{
-    {t, t} -> -1 / h[r],
-    {r, r} -> f[r],
-    {Mx`a, Mx`b} -> 1 / r^2 metricMx[Mx`a, Mx`b]
+metricInvVal = GCTensorFromSparse[{
+    {1, 1} -> -1 / h[r],
+    {2, 2} -> f[r],
+    {3, 3} -> ETensor[1 / r^2 metricMx[Mx`a, Mx`b]]
 }, {decomp, decomp}];
 
 detg = h[r] / f[r] r^(2dimx);
@@ -80,11 +83,11 @@ MUnit`EndTestSection[];
 
 MUnit`BeginTestSection["Outer product"];
 
-holder1 /: HeldGCTensor[holder1, n0] = CreateGCTensor[{{r} -> Sqrt[f[r]]}, {decomp}];
+holder1 /: HeldGCTensor[holder1, n0] = GCTensorFromSparse[{{2} -> Sqrt[f[r]]}, {decomp}];
 VerificationTest[
-    ETensor[(n0[Mf`A] n0[Mf`B] // ContractGCTensors[holder1]) - CreateGCTensor[{{r, r} -> f[r]}, {decomp, decomp}][Mf`A, Mf`B], {Mf`A, Mf`B}] // ScreenDollarIndices
+    ETensor[(n0[Mf`A] n0[Mf`B] // ContractGCTensors[holder1]) - GCTensorFromSparse[{{2, 2} -> f[r]}, {decomp, decomp}][Mf`A, Mf`B], {Mf`A, Mf`B}] // ScreenDollarIndices
 ,
-    CreateGCTensor[{}, {decomp, decomp}]
+    GCTensorFromSparse[{}, {decomp, decomp}]
 ];
 
 VerificationTest[
@@ -98,13 +101,13 @@ MUnit`EndTestSection[];
 MUnit`BeginTestSection["FG expansion"];
 
 SetHeldMetric[fgcHolder, metricMf,
-    CreateGCTensor[{
-        {-r2, -r2} -> L0^2/(4 r2^2),
-        {-Mr`a, -Mr`b} -> 1/r2 metricMr[-Mr`a, -Mr`b]
+    GCTensorFromSparse[{
+        {1, 1} -> L0^2/(4 r2^2),
+        {2, 2} -> ETensor[1/r2 metricMr[-Mr`a, -Mr`b]]
     }, -{fgc, fgc}],
-    CreateGCTensor[{
-        {r2, r2} -> (4 r2^2)/L0^2,
-        {Mr`a, Mr`b} -> r2 metricMr[Mr`a, Mr`b]
+    GCTensorFromSparse[{
+        {1, 1} -> (4 r2^2)/L0^2,
+        {2, 2} -> ETensor[r2 metricMr[Mr`a, Mr`b]]
     }, {fgc, fgc}]
 ];
 AddCurvatureTensorsToHolder[fgcHolder, fgc, ChristoffelCDMf];
@@ -142,65 +145,65 @@ fgEEomExpected = GCTensor[
 VerificationTest[
     Simplify@ToCanonical[fgEEom - fgEEomExpected, UseMetricOnVBundle -> None]
 ,
-    CreateGCTensor[{}, -{fgc, fgc}]
+    GCTensorFromSparse[{}, -{fgc, fgc}]
 ]
 
 MUnit`EndTestSection[];
 
 MUnit`BeginTestSection["ZeroGCTensorQ"];
 
-VerificationTest[ZeroGCTensorQ@CreateGCTensor[{}, -{fgc, fgc, fgc}]];
+VerificationTest[ZeroGCTensorQ@GCTensorFromSparse[{}, -{fgc, fgc, fgc}]];
 
 MUnit`EndTestSection[];
 
 MUnit`BeginTestSection["PostETensorContract"];
 
 VerificationTest[
-    GCTensorContractTwo[CreateGCTensor[{
-        {-Mx`a, -Mx`b} -> metricMx[-Mx`a, -Mx`b] + metricMx[-Mx`b, -Mx`a]
-    }, -{decomp, decomp}], CreateGCTensor[{
-        {Mx`a, Mx`b} -> metricMx[Mx`a, Mx`b] + metricMx[Mx`b, Mx`a]
+    GCTensorContractTwo[GCTensorFromSparse[{
+        {3, 3} -> ETensor[metricMx[-Mx`a, -Mx`b] + metricMx[-Mx`b, -Mx`a]]
+    }, -{decomp, decomp}], GCTensorFromSparse[{
+        {3, 3} -> ETensor[metricMx[Mx`a, Mx`b] + metricMx[Mx`b, Mx`a]]
     }, {decomp, decomp}], {1}, {1}, PostETensorContract -> ContractMetric]
-    - CreateGCTensor[{{-Mx`a, Mx`b} -> 4 delta[-Mx`a, Mx`b]}, {-decomp, decomp}] // ZeroGCTensorQ
+    - GCTensorFromSparse[{{3, 3} -> 4 ETensor[delta[-Mx`a, Mx`b]]}, {-decomp, decomp}] // ZeroGCTensorQ
 ];
 
 MUnit`EndTestSection[];
 
 MUnit`BeginTestSection["Covariant derivatives"];
 
-v1 = CreateGCTensor[{
-    {t} -> h[t, r],
-    {r} -> f[t, r],
-    {Mx`a} -> v0[Mx`a]
+v1 = GCTensor[{
+    h[t, r],
+    f[t, r],
+    ETensor[v0[Mx`a]]
 }, {decomp}];
 
-t1 = CreateGCTensor[{
-    {t, -t} -> h[t, r],
-    {r, -r} -> f[t, r],
-    {r, -Mx`a} -> f[t, r] v0[-Mx`a],
-    {Mx`a, -Mx`b} -> v0[Mx`a] v0[-Mx`b]
+t1 = GCTensorFromSparse[{
+    {1, 1} -> h[t, r],
+    {2, 2} -> f[t, r],
+    {2, 3} -> ETensor[f[t, r] v0[-Mx`a]],
+    {3, 3} -> ETensor[v0[Mx`a] v0[-Mx`b]]
 }, {decomp, -decomp}];
 
-p0 = CreateGCTensor[{
-    {t, r, t, r} -> Pn[1, r],
-    {t, r, r, t} -> -Pn[1, r],
-    {r, t, t, r} -> -Pn[1, r],
-    {r, t, r, t} -> Pn[1, r],
+p0 = GCTensorFromSparse[{
+    {1, 2, 1, 2} -> Pn[1, r],
+    {1, 2, 2, 1} -> -Pn[1, r],
+    {2, 1, 1, 2} -> -Pn[1, r],
+    {2, 1, 2, 1} -> Pn[1, r],
 
-    {t, Mx`b, t, Mx`a} -> Pn[2, r] metricMx[Mx`a, Mx`b],
-    {t, Mx`b, Mx`a, t} -> -Pn[2, r] metricMx[Mx`a, Mx`b],
-    {Mx`b, t, t, Mx`a} -> -Pn[2, r] metricMx[Mx`a, Mx`b],
-    {Mx`a, t, Mx`b, t} -> Pn[2, r] metricMx[Mx`a, Mx`b],
+    {1, 3, 1, 3} -> ETensor[Pn[2, r] metricMx[Mx`a, Mx`b]],
+    {1, 3, 3, 1} -> ETensor[-Pn[2, r] metricMx[Mx`a, Mx`b]],
+    {3, 1, 1, 3} -> ETensor[-Pn[2, r] metricMx[Mx`a, Mx`b]],
+    {3, 1, 3, 1} -> ETensor[Pn[2, r] metricMx[Mx`a, Mx`b]],
 
-    {r, Mx`b, r, Mx`a} -> Pn[3, r] metricMx[Mx`a, Mx`b],
-    {r, Mx`b, Mx`a, r} -> -Pn[3, r] metricMx[Mx`a, Mx`b],
-    {Mx`b, r, r, Mx`a} -> -Pn[3, r] metricMx[Mx`a, Mx`b],
-    {Mx`a, r, Mx`b, r} -> Pn[3, r] metricMx[Mx`a, Mx`b],
+    {2, 3, 2, 3} -> ETensor[Pn[3, r] metricMx[Mx`a, Mx`b]],
+    {2, 3, 3, 2} -> ETensor[-Pn[3, r] metricMx[Mx`a, Mx`b]],
+    {3, 2, 2, 3} -> ETensor[-Pn[3, r] metricMx[Mx`a, Mx`b]],
+    {3, 2, 3, 2} -> ETensor[Pn[3, r] metricMx[Mx`a, Mx`b]],
 
-    {Mx`a, Mx`b, Mx`c, Mx`d} -> Pn[4, r] (
+    {3, 3, 3, 3} -> ETensor[Pn[4, r] (
         metricMx[Mx`a, Mx`c] metricMx[Mx`b, Mx`d]
         - metricMx[Mx`a, Mx`d] metricMx[Mx`b, Mx`c]
-    )
+    )]
 }, {decomp, decomp, decomp, decomp}];
 
 covd = CovDGChart[-decomp, CachedGCTensor[holder1, ChristoffelCDMf, {1, -1, -1}]];
@@ -262,7 +265,7 @@ MUnit`BeginTestSection["DeltaGCTensor"];
 VerificationTest[
     With[{
         delta01 = DeltaGCTensor[decomp, -decomp],
-        delta02 = CreateGCTensor[{{r, -r} -> 1, {t, -t} -> 1, {Mx`a, -Mx`b} -> delta[Mx`a, -Mx`b]}, {decomp, -decomp}]
+        delta02 = GCTensorFromSparse[{{1, 1} -> 1, {2, 2} -> 1, {3, 3} -> ETensor[delta[Mx`a, -Mx`b]]}, {decomp, -decomp}]
     }, ZeroGCTensorQ[delta01 - delta02 // ToCanonical]]
 ];
 
@@ -271,7 +274,7 @@ MUnit`EndTestSection[];
 MUnit`BeginTestSection["Misc"];
 
 VerificationTest[
-    ContractGCTensors[n1[-Mf`A] n1[Mf`A], holder1, OtherReplaces -> { n1 -> CreateGCTensor[{{r} -> Sqrt[f[r]]}, {decomp}] }]
+    ContractGCTensors[n1[-Mf`A] n1[Mf`A], holder1, OtherReplaces -> { n1 -> GCTensorFromSparse[{{2} -> Sqrt[f[r]]}, {decomp}] }]
 ,
     1
 ];
@@ -293,8 +296,6 @@ GCTensor[{ETensor[n0[a], {a}]}, {NoDecomp, decomp}]
 
 MUnit`EndTestSection[];
 
-UndefGBasis@decomp;
-UndefGBasis@fgc;
 UndefTensor /@ {n0, n1, v0};
 Undef /@ VisitorsOf@metricMf;
 Undef /@ VisitorsOf@metricMx;
