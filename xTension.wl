@@ -457,6 +457,7 @@ UniqueIndex[-e_Symbol] := -UniqueIndex[e];
 
 (* ETensor *)
 ETensor::invldmlt = "Attempting to multiply two ETensors.";
+ETensor::icinds = "Incompatible indices `1` and `2`.";
 ETensor[expr_] := ETensor[expr, List @@ FindFreeIndices@expr];
 ETensor[expr_, {}] := Scalar[expr];
 ETensor[expr_, inds_List][inds2__] /; Length@inds === Length@{inds2} := Module[
@@ -468,12 +469,12 @@ ETensor[expr_, inds_List][inds2__] /; Length@inds === Length@{inds2} := Module[
     ReplaceIndex[ReplaceDummies@expr, Join[#1 -> #3 & @@@ unmatchedInds, #1 -> #2 & @@@ matchedInds]] * deltas
 ];
 ETensor /:
-    ETensor[expr1_, inds1_List] + ETensor[expr2_, inds2_List] /; CompatibleIndexListsQ[inds1, inds2] := (
+    ETensor[expr1_, inds1_List] + ETensor[expr2_, inds2_List] := (
         ETensor[
             ReplaceDummies[expr1]
             + (ReplaceDummies[expr2] // ReplaceIndex[#, Thread[inds2 -> inds1]] &)
         , inds1]
-    );
+    ) /; If[CompatibleIndexListsQ[inds1, inds2], True, Message[ETensor::icinds, inds1, inds2]; False];
 ETensor /: Times[ETensor[expr_, inds_], factors__] := (
     If[Cases[{factors}, _ETensor], Message[ETensor::invldmlt]];
     ETensor[Times[expr, factors], inds]
