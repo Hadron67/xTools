@@ -70,8 +70,8 @@ ETensorPDGrad::usage = "ETensorPDGrad[T, vb] or ETensorPDGrad[vb][T] adds a PD t
 ETensorPDDiv::usage = "ETensorPDDiv[T, axis] contracts the PD operator with the specfied axis.";
 
 ZeroETensor::usage = "ZeroETensor[vbs] creates a zero ETensor.";
-ETensorContract::usage = "ETensorContract[T, n1, n2] contracts n1 axis with n2 of T.";
-ETensorContractTwo::usage = "ETensorContractTwo[T1, T2, {n1...}, {n2...}] contracts the n1... axes of T1 to n2.. axes of T2.";
+ETensorContract::usage = "ETensorContract[T, {{n1, n2}, ...}] contracts n1 axis with n2 of T.";
+ETensorContractTwo::usage = "ETensorContractTwo[T1, T2, {{n1, n2}, ...}] contracts the n1... axes of T1 to n2.. axes of T2.";
 ETensorRank::usage = "ETensorRank[ETensor[...]] gives the rank of the ETensor.";
 ToETensor::usage = "ToETensor[T] converts tensor head T to ETensor.";
 ZeroETensorQ::usage = "ZeroETensorQ[T] gives True of T is a zero tensor.";
@@ -89,7 +89,7 @@ CovDCommuToRiemann::usage = "CovDCommuToRiemann[expr, filter] find covd commutat
 SeparateMetricRiemann::usage = "SeparateMetricRiemann[expr, filter] calls SeparateMetric on all Riemann tensors.";
 ContractTensorWithMetric::usage = "ContractTensorWithMetric[expr, metric, filter] calls ContractMetric[t, metric] on specific tensors in expr.";
 
-ListToCanonical::usage = "ListToCanonical[list, group] canonicalizes the list with the given symmetry group.";
+ListToCanonical::usage = "ListToCanonical[list, group, gap] canonicalizes the list with the given symmetry group.";
 
 $xToolsDebugFilter = {};
 $xToolsDebugFilter::usage = "$xDecompDebugFilter is a global variable, containing all enabled debug messages.";
@@ -523,49 +523,41 @@ DedupeRules[inds1_, inds2_] := With[{
 IndexedScalarQ[_ETensor | _List] = False;
 IndexedScalarQ[_] = True;
 
-ETensorProduct[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], rest___] := With[{
-    rep = DedupeRules[inds1, inds2]
-},
-    ETensorProduct[
-        ETensor[ReplaceDummies[expr1] * ReplaceIndex[Evaluate@ReplaceDummies[expr2], rep], Join[inds1, inds2 /. rep]],
-        rest
-    ]
-];
-ETensorProduct[left___, Zero, right___] = Zero;
+ETensorProduct[e1_ETensor, e2_ETensor, rest___] := ETensorProduct[ETensorContractTwo[e1, e2, {}], rest];
 ETensorProduct[e_] := e;
-ETensorProduct[expr_ /; !MatchQ[expr, _List], l_List, rest___] := ETensorProduct[expr, #, rest] & /@ l;
-ETensorProduct[l_List, rest___] := ETensorProduct[#, rest] & /@ l;
-ETensorProduct[ETensor[expr_, inds_], x_?IndexedScalarQ, rest___] := ETensorProduct[ETensor[expr * ReplaceDummies@x, inds], rest];
-ETensorProduct[x_?IndexedScalarQ, ETensor[expr_, inds_], rest___] := ETensorProduct[ETensor[expr * ReplaceDummies@x, inds], rest];
-ETensorProduct[x_?IndexedScalarQ, y_?IndexedScalarQ, rest___] := ReplaceDummies[x]*ReplaceDummies[y]*If[Length@{rest} === 0, 1, ETensorProduct[rest]];
 SyntaxInformation[ETensorProduct] = {"ArgumentsPattern" -> {___}};
 
-ETensorContractTwo0[expr1_, inds1_, expr2_, inds2_, n1_List, n2_List] := With[{
-    a = inds1[[#]] & /@ n1,
-    b = inds2[[#]] & /@ n2
+ETensorContractTwo0[expr1_, inds1_, expr2_, inds2_, nn_List] := With[{
+    a = inds1[[#]] & /@ nn[[All, 1]],
+    b = inds2[[#]] & /@ nn[[All, 2]]
 },  With[{bi = UniqueIndex /@ b},
-    ETensor[ReplaceDummies[expr1] * ReplaceIndex[ReplaceDummies[expr2], Thread[b -> bi]] * (Times @@ (delta[ChangeIndex@#1, ChangeIndex@#2] & @@@ Thread@{a, bi})), Join[Delete[inds1, Transpose@{n1}], Delete[inds2, Transpose@{n2}]]]
+    ETensor[
+        ReplaceDummies[expr1] * ReplaceIndex[ReplaceDummies[expr2], Thread[b -> bi]] *
+        (Times @@ (delta[ChangeIndex@#1, ChangeIndex@#2] & @@@ Thread@{a, bi}))
+    ,
+        Join[Delete[inds1, Transpose@{nn[[All, 1]]}], Delete[inds2, Transpose@{nn[[All, 2]]}]]
+    ]
 ]];
 
-ETensorContractTwo[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], n1_, n2_] := With[{
+ETensorContractTwo[ETensor[expr1_, inds1_], ETensor[expr2_, inds2_], nn_List] := With[{
     rep = DedupeRules[inds1, inds2]
-}, ETensorContractTwo0[expr1, inds1, ReplaceIndex[expr2, rep], inds2 /. rep, n1, n2]];
-ETensorContractTwo[a_, b_, n_Integer] := ETensorContractTwo[a, b, Range[-n, -1], Range@n];
-ETensorContractTwo[ETensor[expr_, inds_], x_?IndexedScalarQ, {}, {}] := ETensor[expr * ReplaceDummies@x, inds];
-ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}, {}] := ETensor[expr * ReplaceDummies@x, inds];
-ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}, {}] := ReplaceDummies[x] * ReplaceDummies[y];
+}, ETensorContractTwo0[expr1, inds1, ReplaceIndex[expr2, rep], inds2 /. rep, nn]];
+ETensorContractTwo[a_, b_, n_Integer] := ETensorContractTwo[a, b, Thread@{Range[-n, -1], Range@n}];
+ETensorContractTwo[ETensor[expr_, inds_], x_?IndexedScalarQ, {}] := ETensor[expr * ReplaceDummies@x, inds];
+ETensorContractTwo[x_?IndexedScalarQ, ETensor[expr_, inds_], {}] := ETensor[expr * ReplaceDummies@x, inds];
+ETensorContractTwo[x_?IndexedScalarQ, y_?IndexedScalarQ, {}] := ReplaceDummies[x] * ReplaceDummies[y];
 SyntaxInformation[ETensorContractTwo] = {"ArgumentsPattern" -> {_, _, _, _}};
 
-ETensorContract[ETensor[expr_, inds_], n1_List, n2_List] := With[{
-    a1 = inds[[n1]],
-    a2 = inds[[n2]]
+ETensorContract[ETensor[expr_, inds_], nn_List] := With[{
+    a1 = inds[[ nn[[All, 1]] ]],
+    a2 = inds[[ nn[[All, 2]] ]]
 }, With[{a2i = UniqueIndex /@ a2},
     ETensor[
         ReplaceIndex[expr, Thread[a2 -> a2i]] * (Times @@ MapThread[delta[ChangeIndex@#1, ChangeIndex@#2] &, {a1, a2i}]),
-        Delete[inds, Transpose@{Join[n1, n2]}]
+        Delete[inds, Transpose@{Join @@ Transpose@nn}]
     ]
 ]];
-ETensorContract[e_, {}, {}] := e;
+ETensorContract[e_, {}] := e;
 SyntaxInformation[ETensorContract] = {"ArgumentsPattern" -> {_, _, _}};
 
 ETensorRank[ETensor[_, inds_]] := Length@inds;
@@ -856,14 +848,17 @@ ContractTensorWithMetric[expr_, filter_, metrics_] := expr //. {
 };
 SyntaxInformation[ContractTensorWithMetric] = {"ArgumentsPattern" -> {_, _, _}};
 
-ListToCanonical[list_List, group_] := Module[
-    {canonList, repeated, perm},
+ListToCanonical[list_List, group_, free_] := Module[
+    {listSet, canonList, repeated, frees, perm},
+    listSet = Union@list;
     canonList = Sort[list];
-    repeated = Transpose[Position[canonList, #, {1}]][[1]] & /@ Union[list];
-    perm = CanonicalPerm[Images@InversePermutation@Ordering@list, Length@list, group, {}, RepeatedSet /@ repeated];
+    repeated = Transpose[Position[canonList, #, {1}]][[1]] & /@ If[free =!= None, Select[listSet, # < free &], listSet];
+    frees = If[free =!= None, Select[MapIndexed[{#1, #2[[1]]} &, canonList], #[[1]] >= free &][[All, 2]], {}];
+    perm = CanonicalPerm[Images@InversePermutation@Ordering@list, Length@list, group, frees, RepeatedSet /@ repeated];
     If[perm === 0, {0, list}, {If[Head[perm] === Times, -1, 1], PermuteList[canonList, InversePerm@perm]}]
 ];
-SyntaxInformation[ListToCanonical] = {"ArgumentsPattern" -> {_, _}};
+ListToCanonical[list_List, group_] := ListToCanonical[list, group, None];
+SyntaxInformation[ListToCanonical] = {"ArgumentsPattern" -> {_, _, _.}};
 
 End[];
 

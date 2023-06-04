@@ -163,7 +163,7 @@ VerificationTest[
         {3, 3} -> ETensor[metricMx[-Mx`a, -Mx`b] + metricMx[-Mx`b, -Mx`a]]
     }, -{decomp, decomp}], GCTensorFromSparse[{
         {3, 3} -> ETensor[metricMx[Mx`a, Mx`b] + metricMx[Mx`b, Mx`a]]
-    }, {decomp, decomp}], {1}, {1}, PostETensorContract -> ContractMetric]
+    }, {decomp, decomp}], {{1, 1}}, PostETensorContract -> ContractMetric]
     - GCTensorFromSparse[{{3, 3} -> 4 ETensor[delta[-Mx`a, Mx`b]]}, {-decomp, decomp}] // ZeroGCTensorQ
 ];
 
