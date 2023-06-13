@@ -68,6 +68,7 @@ ETensorProduct::usage = "ETensorProduct[e1, e2, ...] computes the tensor outer p
 ETensorTranspose::usage = "ETensorTranspose[ETensor[...], perms] performs the transpose of the ETensor.";
 ETensorPDGrad::usage = "ETensorPDGrad[T, vb] or ETensorPDGrad[vb][T] adds a PD to the ETensor.";
 ETensorPDDiv::usage = "ETensorPDDiv[T, axis] contracts the PD operator with the specfied axis.";
+ETensorBroadcastQ::usage = "ETensorBroadcastQ[fn] gives true for functions fn that should be broadcasted into ETensor expression.";
 
 ZeroETensor::usage = "ZeroETensor[vbs] creates a zero ETensor.";
 ETensorContract::usage = "ETensorContract[T, {{n1, n2}, ...}] contracts n1 axis with n2 of T.";
@@ -480,12 +481,11 @@ ETensor /: Times[ETensor[expr_, inds_], factors__] := (
     ETensor[Times[expr, factors], inds]
 );
 
-DefETensorMapFunc[funcs__] := Function[func,
-    ETensor /: func[ETensor[expr_, inds_], args___] := ETensor[func[expr, args], inds];
-] /@ {funcs};
-DefETensorMapFunc[
+(ETensorBroadcastQ[#] = True) & /@ {
     D,
     Dt,
+    ParamD[__],
+    SeparateMetric[___],
     ToCanonical,
     Simplification,
     Simplify,
@@ -500,9 +500,9 @@ DefETensorMapFunc[
     SeparateMetricRiemann,
     CovDCommuToRiemann,
     ContractTensorWithMetric
-];
-ETensor /: ParamD[params__][ETensor[expr_, args__]] := ETensor[ParamD[params][expr], args];
-ETensor /: SeparateMetric[args___]@ETensor[expr_, args2__] := ETensor[SeparateMetric[args][expr], args2];
+};
+ETensorBroadcastQ[_] = False;
+ETensor /: fn_?ETensorBroadcastQ[ETensor[expr_, inds_], args___] := ETensor[fn[expr, args], inds];
 ETensor /: FindFreeIndices[ETensor[_, inds_]] := IndexList @@ inds;
 ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
     {dollars, rep},

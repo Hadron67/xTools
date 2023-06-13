@@ -4,15 +4,15 @@ $DefInfoQ = False;
 
 DefConstantSymbol[dimx];
 DefParameter /@ {r, t};
-r /: PD[_]@r = 0;
-t /: PD[_]@t = 0;
+r /: _?CovDQ[_]@r = 0;
+t /: _?CovDQ[_]@t = 0;
 DefScalarFunction /@ {h, f, Pn};
 DefManifold[Mf, dimx + 2, IndexRangeNS[Mf`A, Mf`H]];
 DefManifold[Mx, dimx, IndexRangeNS[Mx`a, Mx`h]];
 DefMetric[NoSignDet, metricMf[-Mf`A, -Mf`B], CDMf];
 DefMetric[NoSignDet, metricMx[-Mx`a, -Mx`b], CDMx];
 
-DefGChart[decomp, TangentMf, {2, {TangentMx}}, PDGChartInfo[{t, r}, {{PD, TangentMx}}]];
+DefGChart[decomp, TangentMf, {2, {TangentMx}}, PDGChartInfo[{t, r}, {{CDMx, TangentMx}}]];
 DefTensor[n0[Mf`A], {Mf, r}];
 DefTensor[n1[Mf`A], {Mf, r}];
 DefTensor[v0[Mx`a], {Mx, r}];
@@ -20,10 +20,10 @@ DefTensor[phi0[], {Mf, r, t}];
 
 DefConstantSymbol[L0];
 DefParameter[r2];
-r2 /: PD[_]@r2 = 0;
+r2 /: _?CovDQ[_]@r2 = 0;
 DefManifold[Mr, dimx, IndexRangeNS[Mr`a, Mr`h]];
 DefMetric[NoSignDet, metricMr[-Mr`a, -Mr`b], CDMr, OtherDependencies -> {r2}];
-DefGChart[fgc, TangentMf, {1, {TangentMr}}, PDGChartInfo[{r2}, {{PD, TangentMr}}]];
+DefGChart[fgc, TangentMf, {1, {TangentMr}}, PDGChartInfo[{r2}, {{CDMr, TangentMr}}]];
 
 MUnit`BeginTestSection["Decomposing SSS metric ansatze"];
 
@@ -213,7 +213,7 @@ chris = CachedGCTensor[holder1, ChristoffelCDMf, {1, -1, -1}];
 VerificationTest[
     GCTensorPDDiv[v1, 1][] // NoScalar // ScreenDollarIndices
 ,
-    D[f[t, r], r] + D[h[t, r], t] + PD[-Mx`a][v0[Mx`a]]
+    D[f[t, r], r] + D[h[t, r], t] + CDMx[-Mx`a][v0[Mx`a]]
 ];
 
 VerificationTest[
@@ -285,14 +285,12 @@ MUnit`BeginTestSection["Change GCTensor indices"];
 
 VerificationTest[
     With[{
-        t1 = ContractGCTensors[CDMf[-Mf`A]@CDMf[Mf`A]@phi0[], holder1] /. PD[_]@phi0[] -> 0 // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify,
+        t1 = ContractGCTensors[CDMf[-Mf`A]@CDMf[Mf`A]@phi0[], holder1] /. _?CovDQ[_]@phi0[] -> 0 // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify,
         t2 = 1 / Sqrt[detg] (-ParamD[t][Sqrt[detg] 1/h[r] ParamD[t]@phi0[]] + ParamD[r][Sqrt[detg] f[r] ParamD[r]@phi0[]])
     },
         Simplify[t1 - t2] == 0
     ]
 ];
-
-GCTensor[{ETensor[n0[a], {a}]}, {NoDecomp, decomp}]
 
 MUnit`EndTestSection[];
 

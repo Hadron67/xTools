@@ -41,6 +41,7 @@ HeldCovDOfGCTensorHolder::usage = "HeldCovDOfGCTensorHolder[holder, covd] return
 GCTensorHolderAction::usage = "GCTensorHolderAction[holder, tag, expr] defines some extra action applies in various computation stages. Typically used to simplify expressions.";
 GCTensorHolderDefaultAction::usage = "GCTensorHolderDefaultAction[holder, tag, expr] is the default value for GCTensorHolderAction[holder, tag, expr].";
 GCTensorHolderDAUseMetricVB::usage = "GCTensorHolderDAUseMetricVB[holder] is the UseMetricOnVBundle option passed to ToCanonical by GCTensorHolderDefaultAction[holder]. Default is All.";
+GCTensorHolderDAContractMetric::usage = "GCTensorHolderDAContractMetric[holder] controls whether to run ContractMetric in GCTensorHolderDefaultAction[holder].";
 PostCurvatureTensorCalculation::usage = "PostCurvatureTensorCalculation[tensor] is an action tag for GCTensorHolderAction that's executed after the calculation of every curvature related tensors.";
 PostChangeIndex::usage = "PostChangeIndex[tensor, indices, changedInd] is an action tag for GCTensorHolderAction that's executed after changing index for a cached tensor.";
 
@@ -52,6 +53,7 @@ ExpandPDToGCTensor::usage = "ExpandPDToGCTensor[expr, chart] or ExpandPDToGCTens
 
 GCTensor::usage = "GCTensor[values, charts] represents a generalized CTensor.";
 GCArray::usage = "GCArray[arr, {{clen, subLen}, ...}] represents a generalized multi-dimension array.";
+GCArrayBroadcastQ::usage = "GCArrayBroadcastQ[fn] gives true for functions that should be broadcasted into the GCTensor and GCArray.";
 GCTensorChangeBasis::usage = "GCTensorChangeBasis[GCTensor[...], n, basis] changes the basis of n-th axis to the specified basis.";
 EnsureGCTensorBasis::usage = "EnsureGCTensorBasis[GCTensor[...], basis] changes the basis of the GCTensor of any of the axes doesn't match the given one.";
 GCTensorTranspose::usage = "GCTensorTranspose[GCTensor[...], perms] performs the tensor transpose of GCTensor.";
@@ -68,7 +70,8 @@ GCArrayContractTwo::usage = "GCArrayContractTwo[T1, T2, {{n1, m1}, ...}] compute
 IdentityGCArray::usage = "IdentityGCArray[cLen, {TM1, ...}, {1, -1}] or IdentityGCArray[cLen, {TM1, ...}, {-1, 1}] returns an identity GCArray.";
 GCArrayFromSparse::usage = "GCArrayFromSparse[{{...} -> ...}, {...}] initialize a GCArray from sparse notation.";
 GCTensorFromSparse::usage = "GCTensorFromSparse[{{...} -> ...}, {chart1, ...}] initialize a GCTensor from sparse notation.";
-RiemannOfPDGChart::usage = "RiemannOfPDGChart[PDGChart] gives the Riemann tensor of the connection defined by the PD.";
+RiemannOfPDGChartInfo::usage = "RiemannOfPDGChartInfo[PDGChartInfo[...]] gives the Riemann tensor of the connection defined by the PD.";
+RiemannOfGChart::usage = "RiemannOfPDGChartInfo[chart] gives the GCTensor of RiemannOfPDGChartInfo[PDInfoOfGChart@chart].";
 
 GCTensorToComponentRules::usage = "GCTensorToComponentRules[T] converts GCTensor to a list of component rules.";
 
@@ -264,12 +267,18 @@ SyntaxInformation[HeldGCTensor] = {"ArgumentsPattern" -> {_, _}};
 SlotsOfHeldGCTensor[_, tensor_?xTensorQ] := SlotsOfTensor@tensor;
 
 GCTensorHolderDAUseMetricVB[_] = All;
+GCTensorHolderDAContractMetric[_] = True;
 SyntaxInformation[GCTensorHolderDAUseMetricVB] = {"ArgumentsPattern" -> {_}};
+SyntaxInformation[GCTensorHolderDAContractMetric] = {"ArgumentsPattern" -> {_}};
 
+runHolderContractMetric[holder_, expr_, args___] := If[GCTensorHolderDAContractMetric@holder, ContractMetric[expr, args], expr];
 GCTensorHolderAction[holder_, tag_, expr_] := GCTensorHolderDefaultAction[holder, tag, expr];
 GCTensorHolderDefaultAction[holder, _, e_] := e;
-GCTensorHolderDefaultAction[holder_, PostChangeIndex[tensor_, inds_, i_], expr_] := Simplify@ToCanonical[ContractMetric[expr], UseMetricOnVBundle -> GCTensorHolderDAUseMetricVB@holder];
-GCTensorHolderDefaultAction[holder_, PostChangeIndex[tensor_, inds_, i_], expr: GCTensor[arr_, basis_]] := Simplify@ToCanonical[ContractMetric[expr, First@MetricsOfVBundle@# & /@ SubVBundlesOfGChart@UpGChart@basis[[i]]], UseMetricOnVBundle -> GCTensorHolderDAUseMetricVB@holder];
+GCTensorHolderDefaultAction[holder_, PostChangeIndex[tensor_, inds_, i_], expr_] := Simplify@ToCanonical[runHolderContractMetric[holder, expr], UseMetricOnVBundle -> GCTensorHolderDAUseMetricVB@holder];
+GCTensorHolderDefaultAction[holder_, PostChangeIndex[tensor_, inds_, i_], expr: GCTensor[arr_, basis_]] := Simplify@ToCanonical[
+    runHolderContractMetric[holder, expr, First@MetricsOfVBundle@# & /@ SubVBundlesOfGChart@UpGChart@basis[[i]]],
+    UseMetricOnVBundle -> GCTensorHolderDAUseMetricVB@holder
+];
 GCTensorHolderDefaultAction[holder_, PostCurvatureTensorCalculation[tensor_], expr_] := Simplify@ToCanonical[expr, UseMetricOnVBundle -> None];
 SyntaxInformation[GCTensorHolderAction] = {"ArgumentsPattern" -> {_, _, _}};
 SyntaxInformation[GCTensorHolderDefaultAction] = {"ArgumentsPattern" -> {_, _, _}};
@@ -343,31 +352,24 @@ AddCurvatureTensorsToHolder[holder_Symbol, chart_?GChartQ, chris_] := Module[
             ContractGCTensors[ChristoffelToGradMetric[chris[a, -b, -c], metric] // ExpandPDToGCTensor[chart], holder]
         ,
             {a, -b, -c}
-        ] // NoScalar // Fold[ChangeCovD[#1, PD, #2] &, #, subCDs] &
+        ] // NoScalar
         // GCTensorHolderAction[holder, PostCurvatureTensorCalculation[chris], #] &;
         holder /: HeldCovDOfGCTensorHolder[holder, cd2] := CovDGChart[-chart, CachedGCTensor[holder, chris, {1, -1, -1}]];
 
         (* Riemann tensor *)
-        holder /: HeldGCTensor[holder, riem] := ETensor[
+        holder /: HeldGCTensor[holder, riem] := SeparateMetricRiemann@RiemannOfGChart@chart + ETensor[
             ContractGCTensors[ChangeCurvature[riem[-a, -b, -c, d], cd2, PD] // ExpandPDToGCTensor[chart], holder]
         ,
             {-a, -b, -c, d}
         ] // NoScalar
         // SortCommParamDLeviCivitaCovD // ToCanonicalN
         // ExpandParamDLeviCivitaChristoffel // ToCanonicalN
-        // Fold[ChangeCovDNonChristoffel[#1, PD, #2] &, #, subCDs] & // ToCanonicalN
-        // PdSymChristoffelToRiemann // ToCanonicalN
         // CovDCommuToRiemann // ToCanonicalN
-        // SeparateMetricRiemann // ToCanonicalN
         // GCTensorHolderAction[holder, PostCurvatureTensorCalculation[riem], #] &;
         holder /: SlotsOfHeldGCTensor[holder, riem] = MapAt[-# &, SlotsOfTensor@riem, 4];
 
         (* Ricci tensor *)
-        holder /: HeldGCTensor[holder, ricci] := ETensor[
-            CachedGCTensor[holder, riem][-a, -c, -b, -d] CachedGCTensor[holder, metric][c, d] // ContractGCTensors[holder]
-        ,
-            {-a, -b}
-        ] // ToCanonicalN
+        holder /: HeldGCTensor[holder, ricci] := GCTensorContract[CachedGCTensor[holder, riem, {-1, -1, -1, 1}], {{2, 4}}] // ToCanonicalN
         // ContractTensorWithMetric[#, Riemann /@ subCDs, subMetrics] &
         // ToCanonicalN
         // GCTensorHolderAction[holder, PostCurvatureTensorCalculation[ricci], #] &;
@@ -695,38 +697,14 @@ GCTensorToComponentRules[GCTensor[arr_, basis_]] := Select[
 ];
 SyntaxInformation[GCTensorToComponentRules] = {"ArgumentsPattern" -> {_}};
 
-DefGCTensorMapFunc[funcs__] := Function[func,
-    GCTensor /: func[GCTensor[arr_, basis_], args___] := GCTensor[Map[func[#, args] &, arr, {Length@basis}], basis];
-    GCTensor /: func[GCTensor[arr_, basis_][inds__], args___] := GCTensor[Map[func[#, args] &, arr, {Length@basis}], basis][inds];
-    GCArray /: func[GCArray[arr_, basis_], args___] := GCArray[Map[func[#, args] &, arr, {Length@basis}], basis];
-    GCArray /: func[GCArray[arr_, basis_][inds__], args___] := GCArray[Map[func[#, args] &, arr, {Length@basis}], basis][inds];
-] /@ {funcs};
+GCArrayBroadcastQ@ScreenDollarIndices = True;
+GCArrayBroadcastQ[fn_] := ETensorBroadcastQ@fn;
+GCTensor /: fn_?GCArrayBroadcastQ[GCTensor[arr_, basis_], args___] := GCTensor[Map[fn[#, args] &, arr, {Length@basis}], basis];
+GCTensor /: fn_?GCArrayBroadcastQ[GCTensor[arr_, basis_][inds__], args___] := GCTensor[Map[fn[#, args] &, arr, {Length@basis}], basis][inds];
+GCArray /: fn_?GCArrayBroadcastQ[GCArray[arr_, basis_], args___] := GCArray[Map[fn[#, args] &, arr, {Length@basis}], basis];
+GCArray /: fn_?GCArrayBroadcastQ[GCArray[arr_, basis_][inds__], args___] := GCArray[Map[fn[#, args] &, arr, {Length@basis}], basis][inds];
 
-DefGCTensorMapFunc[
-    D,
-    Dt,
-    Simplify,
-    Together,
-    Factor,
-    ScreenDollarIndices,
-    ToCanonical,
-    NoScalar,
-    ContractMetric,
-    ChangeCovD,
-    ChangeCurvature,
-    ChristoffelToRiemann,
-    ChristoffelToGradMetric,
-    PdSymChristoffelToRiemann,
-    SortCommParamDLeviCivitaCovD,
-    ExpandParamDLeviCivitaChristoffel,
-    ChangeCovDNonChristoffel,
-    SeparateMetricRiemann,
-    CovDCommuToRiemann,
-    ContractTensorWithMetric
-];
 GCTensor[e_, {}][] := Scalar[e];
-GCTensor /: ParamD[args__]@GCTensor[arr_, basis] := GCTensor[Map[ParamD[args], arr, {Length@basis}], basis];
-GCTensor /: SeparateMetric[args__]@GCTensor[arr_, basis] := GCTensor[Map[SeparateMetric[args], arr, {Length@basis}], basis];
 GCTensor /: ETensor[t_GCTensor[inds__], {inds2__}] := With[{
     perm = PermutationProduct[InversePermutation@Ordering@{inds}, Ordering@{inds2}]
 }, GCTensorTranspose[t, perm]] /; Sort@{inds} === Sort@{inds2};
@@ -805,25 +783,33 @@ GCTensorFromSparse[elem_, basis_] := GCTensor[GCArrayFromSparse[elem, Decomposit
 SyntaxInformation[GCTensorFromSparse] = {"ArgumentsPattern" -> {_, _}};
 
 pdChristOuter[{param_, n1_}, {{pd_, vb_}, n2_}] := With[{
-    inds = GetIndicesOfVBundle[vb, 3]
+    inds = MapAt[-# &, GetIndicesOfVBundle[vb, 3], {{2}, {3}}]
 }, With[{
-    elem = ETensor[-ParamD[param][Christoffel[pd] @@ inds], inds]
+    elem = ETensor[-$RiemannSign * ParamD[param][Christoffel[pd] @@ inds], Permute[inds, {3, 1, 2}]]
 }, {
     {n1, n2, n2, n2} -> elem,
     {n2, n1, n2, n2} -> -elem
 }]];
-RiemannOfPDGChart[chart_, PDGChartInfo[coords_, subs_, mat_]] := Module[
+RiemannOfPDGChartInfo[PDGChartInfo[coords_, subs_, mat_]] := Module[
     {coordsI, subsI, riems, pdChris},
     coordsI = MapIndexed[{#1, #2[[1]]} &, coords];
     subsI = MapIndexed[{#1, #2[[1]] + Length@coords} &, subs];
     riems = With[{
-        idx = #2[[1]],
+        idx = #2,
         pd = #1[[1]],
         inds = MapAt[-# &, -GetIndicesOfVBundle[#1[[2]], 4], 4]
-    }, {idx, idx, idx, idx} -> ETensor[Riemann[pd] @@ inds, {inds}]] & /@ subsI;
-    pdChris = Join @@ Outer[pdChristOuter, coordsI, subsI];
-    Join[riems, pdChris]
+    }, {idx, idx, idx, idx} -> ETensor[Riemann[pd] @@ inds, inds]] & @@@ subsI;
+    pdChris = Flatten[Outer[pdChristOuter, coordsI, subsI, 1], 2];
+    (* TODO: handle torsion *)
+    GCArrayFromSparse[
+        Join[riems, pdChris],
+        With[{el = {Length@coords, subs[[All, 2]]}, el2 = {Length@coords, -subs[[All, 2]]}}, {el2, el2, el2, el}]
+    ]
 ];
+SyntaxInformation[RiemannOfPDGChartInfo] = {"ArgumentsPattern" -> {_}};
+
+RiemannOfGChart[chart_] := GCTensor[RiemannOfPDGChartInfo[PDInfoOfGChart@chart][[1]], {-chart, -chart, -chart, chart}];
+SyntaxInformation[RiemannOfGChart] = {"ArgumentsPattern" -> {_}};
 
 IdentityGCArray[clen_, subvbs_, il: Alternatives[{1, -1}, {-1, 1}]] := With[{
     len = clen + Length@subvbs,
