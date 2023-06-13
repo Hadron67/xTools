@@ -587,13 +587,13 @@ ETensorTranspose[Zero, _] = Zero;
 ETensorTranspose[expr_Plus, perms_] := ETensorTranspose[#, perms] & /@ expr;
 SyntaxInformation[ETensorTranspose] = {"ArgumentsPattern" -> {_, _}};
 
-ETensorPDGrad[vb_][expr_] := ETensorPDGrad[expr, vb];
-ETensorPDGrad[x_?IndexedScalarQ, vb_] := With[{
+ETensorPDGrad[pd_, vb_][expr_] := ETensorPDGrad[expr, pd, vb];
+ETensorPDGrad[x_?IndexedScalarQ, pd_, vb_] := With[{
     ai = First@GetIndicesOfVBundle[vb, 1]
-}, ETensor[PD[-ai]@ReplaceDummies@x, {-ai}]];
-ETensorPDGrad[ETensor[expr_, inds_], vb_] := With[{
+}, ETensor[pd[-ai]@ReplaceDummies@x, {-ai}]];
+ETensorPDGrad[ETensor[expr_, inds_], pd_, vb_] := With[{
     ai = UniqueIndex@First@GetIndicesOfVBundle[vb, 1]
-}, ETensor[PD[-ai]@expr, Append[inds, -ai]]];
+}, ETensor[pd[-ai]@expr, Append[inds, -ai]]];
 SyntaxInformation[ETensorPDGrad] = {"ArgumentsPattern" -> {_, _}};
 
 ETensorPDDiv::iind = "Cannot contract index `1` with the derivative operator.";

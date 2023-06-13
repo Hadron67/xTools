@@ -12,7 +12,7 @@ DefManifold[Mx, dimx, IndexRangeNS[Mx`a, Mx`h]];
 DefMetric[NoSignDet, metricMf[-Mf`A, -Mf`B], CDMf];
 DefMetric[NoSignDet, metricMx[-Mx`a, -Mx`b], CDMx];
 
-DefGChart[decomp, TangentMf, {2, {TangentMx}}, PDGChartInfo[{t, r}, {TangentMx}]];
+DefGChart[decomp, TangentMf, {2, {TangentMx}}, PDGChartInfo[{t, r}, {{PD, TangentMx}}]];
 DefTensor[n0[Mf`A], {Mf, r}];
 DefTensor[n1[Mf`A], {Mf, r}];
 DefTensor[v0[Mx`a], {Mx, r}];
@@ -23,7 +23,7 @@ DefParameter[r2];
 r2 /: PD[_]@r2 = 0;
 DefManifold[Mr, dimx, IndexRangeNS[Mr`a, Mr`h]];
 DefMetric[NoSignDet, metricMr[-Mr`a, -Mr`b], CDMr, OtherDependencies -> {r2}];
-DefGChart[fgc, TangentMf, {1, {TangentMr}}, PDGChartInfo[{r2}, {TangentMr}]];
+DefGChart[fgc, TangentMf, {1, {TangentMr}}, PDGChartInfo[{r2}, {{PD, TangentMr}}]];
 
 MUnit`BeginTestSection["Decomposing SSS metric ansatze"];
 
