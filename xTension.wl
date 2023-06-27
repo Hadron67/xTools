@@ -486,6 +486,7 @@ ETensor /: Times[ETensor[expr_, inds_], factors__] := (
     Dt,
     ParamD[__],
     SeparateMetric[___],
+    ChangeCovD,
     ToCanonical,
     Simplification,
     Simplify,
@@ -510,7 +511,6 @@ ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
     rep = If[Length@dollars > 0, Thread[dollars -> GetIndicesOfVBundle[VBundleOfIndex@UpIndex@First@dollars, Length@dollars, Union[UpIndex /@ List @@ FindIndices@expr, UpIndex /@ inds]]], {}];
     ETensor[ScreenDollarIndices[expr /. rep], inds /. rep]
 ];
-ETensor /: ChangeCovD[ETensor[expr_, inds_], args___] := ETensor[ChangeCovD[expr, args], inds];
 
 SyntaxInformation[ETensor] = {"ArgumentsPattern" -> {_, _.}};
 
@@ -751,8 +751,6 @@ ExpandParamDLeviCivitaChristoffel[expr_, filter_] := expr /. HoldPattern[
 ] /; FilterExprList[filter, chris];
 ExpandParamDLeviCivitaChristoffel[expr_] := ExpandParamDLeviCivitaChristoffel[expr, All];
 SyntaxInformation[ExpandParamDLeviCivitaChristoffel] = {"ArgumentsPattern" -> {_, _.}};
-
-UpDownRules[l_List] := Replace[a_ -> b_] /@ l;
 
 TestPdSymChrisPair[exprL_List][{n1_, chris_, {a1_, b1_, c1_, d1_}, _}, {n2_, chris_, _, _}] := With[{
     expr1 = exprL[[n1, 2]],

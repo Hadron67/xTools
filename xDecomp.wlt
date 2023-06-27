@@ -286,9 +286,10 @@ MUnit`BeginTestSection["Change GCTensor indices"];
 VerificationTest[
     With[{
         t1 = ContractGCTensors[CDMf[-Mf`A]@CDMf[Mf`A]@phi0[], holder1] /. _?CovDQ[_]@phi0[] -> 0 // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify,
+        t11 = ContractGCTensors[CDMf[Mf`A]@CDMf[-Mf`A]@phi0[], holder1] /. _?CovDQ[_]@phi0[] -> 0 // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] & // Simplify,
         t2 = 1 / Sqrt[detg] (-ParamD[t][Sqrt[detg] 1/h[r] ParamD[t]@phi0[]] + ParamD[r][Sqrt[detg] f[r] ParamD[r]@phi0[]])
     },
-        Simplify[t1 - t2] == 0
+        Simplify[t1 - t2] == 0 && Simplify[t11 - t2] == 0
     ]
 ];
 
