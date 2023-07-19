@@ -20,7 +20,7 @@ GetBasisETensorsOfGChart::usage = "GetBasisETensorsOfGChart[chart] gives a list 
 
 DefGBasis::usage = "DefGBasis[chart, {{e, ed, param}...}, {eT...}] defines a generalized chart with coodinate basis and sub manifolds."
 UndefGBasis::usage = "UndefGBasis[chart] undefines a generalized chart.";
-DefGChart::usage = "DefGBasis[chart, vb, {coordCount, subCount}] is a lightweight version of DefGBasis, where only coordinate and submanifold count are required.";
+DefGChart::usage = "DefGBasis[chart, vb, {coordCount, {Vvb1, vb2, ...}}] is a lightweight version of DefGBasis, where only coordinate and submanifold count are required.";
 SetGChartMetric::usage = "SetGChartMetric[chart, metric, metricValue, metricInvValue] defines metric decomposition rule for metric.";
 
 GetAllHeldTensors::usage = "GetAllCachedTensors[holder] gives a list of tensors that has a definition with the holder.";
@@ -689,7 +689,7 @@ SyntaxInformation[ZeroGCTensorQ] = {"ArgumentsPattern" -> {_}};
 
 nonZeroComponentQ[_ -> ETensor[n_, __]] := n =!= 0;
 nonZeroComponentQ[_ -> n_] := n =!= 0;
-GCTensorToComponentRules[GCTensor[arr_, basis_]] := Select[
+GCTensorToComponentRules[(GCTensor | GCArray)[arr_, basis_]] := Select[
     Flatten[MapIndexed[#2 -> CatchedScreenDollarIndices@#1 &, arr, {Length@basis}], Length@basis],
     nonZeroComponentQ
 ];
@@ -712,10 +712,13 @@ GCTensor /: x_?xTools`xTension`Private`IndexedScalarQ * GCTensor[arr_, basis_] :
 GCTensor /: GCTensor[arr1_, basis1_][inds1__] + GCTensor[arr2_, basis2_][inds2__] := With[{
     perm = PermutationProduct[InversePermutation@Ordering@{inds2}, Ordering@{inds1}]
 },
-    GCTensor[arr1 + GCArrayTranspose[GCTensorToGCArray@GCTensor[arr2, basis2], perm][[1]], basis1][inds1]
-] /; Sort@{inds1} === Sort@{inds2} && basis1 === Permute[basis2, PermutationProduct[InversePermutation@Ordering@{inds2}, Ordering@{inds1}]];
+    GCTensor[arr1 + GCArrayTranspose[GCTensorToGCArray@GCTensor[arr2, basis2], perm][[1]], basis1][inds1] /;
+    Sort@{inds1} === Sort@{inds2} && basis1 === Permute[basis2, perm]
+];
 
-GCTensor /: x_?xAct`xTensor`Private`NonIndexedScalarQ * GCTensor[arr_, basis_][inds__] := GCTensor[arr * x, basis][inds];
+NonIndexedScalarQExt[ParamD[__]@expr_] := NonIndexedScalarQExt@expr;
+NonIndexedScalarQExt[expr_] := xAct`xTensor`Private`NonIndexedScalarQ[expr];
+GCTensor /: x_?NonIndexedScalarQExt * GCTensor[arr_, basis_][inds__] := GCTensor[arr * x, basis][inds];
 
 SyntaxInformation[GCTensor] = {"ArgumentsPattern" -> {_, _}};
 

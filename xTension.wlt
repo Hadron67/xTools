@@ -137,6 +137,30 @@ VerificationTest[
 
 MUnit`EndTestSection[];
 
+MUnit`BeginTestSection["Derivative holder"];
+
+DefDerivativeHolder[pdHolder1, {t, r}, {CDMF}];
+
+VerificationTest[
+    ParamD[r]@pdHolder1[V0][MF`A]
+,
+    pdHolder1[V0, {0, 1, 0}][MF`A]
+];
+
+VerificationTest[
+    CDMF[-MF`B]@pdHolder1[V0][MF`A]
+,
+    pdHolder1[V0, {0, 0, 1}][MF`A, -MF`B]
+];
+
+VerificationTest[
+    ParamD[r]@CDMF[-MF`B]@ParamD[t]@pdHolder1[V0][MF`A]
+,
+    pdHolder1[V0, {1, 1, 1}][MF`A, -MF`B]
+];
+
+MUnit`EndTestSection[];
+
 UndefTensor /@ {eMR, edMR, V0, T1};
 Undef /@ VisitorsOf@metricMX;
 Undef /@ VisitorsOf@metricMF;

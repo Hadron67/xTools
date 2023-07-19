@@ -92,6 +92,8 @@ ContractTensorWithMetric::usage = "ContractTensorWithMetric[expr, metric, filter
 
 ListToCanonical::usage = "ListToCanonical[list, group, gap] canonicalizes the list with the given symmetry group.";
 
+DefDerivativeHolder::usage = "DefDerivativeHolder[name, {param1, param2, ...}, {cd1, cd2, ...}] defines a derivative holder name[tensor, {param1, param2, ...}, {cd1, cd2, ...}].";
+
 $xToolsDebugFilter = {};
 $xToolsDebugFilter::usage = "$xDecompDebugFilter is a global variable, containing all enabled debug messages.";
 
@@ -494,6 +496,7 @@ ETensor /: Times[ETensor[expr_, inds_], factors__] := (
     Together,
     ContractMetric,
     NoScalar,
+    PutScalar,
     PdSymChristoffelToRiemann,
     SortCommParamDLeviCivitaCovD,
     ExpandParamDLeviCivitaChristoffel,
@@ -617,8 +620,7 @@ IndexRangeNS[a_Symbol, p_Symbol] := With[{
     ns = Context@a,
     a0 = SymbolName@a,
     p0 = SymbolName@p
-}, Symbol[ns <> #] & /@ CharacterRange[a0, p0]] /; Context@a === Context@p;
-IndexRangeNS[a_Symbol, p_Symbol] := Throw@Message[IndexRangeNS::nsne, Context@a, Context@p] /; Context@a =!= Context@p;
+}, Symbol[ns <> #] & /@ CharacterRange[a0, p0] /; If[Context@a === Context@p, True, Message[IndexRangeNS::nsne, Context@a, Context@p]; False]];
 SyntaxInformation[IndexRangeNS] = {"ArgumentsPattern" -> {_, _}};
 
 EulerDensityP[riem_, dim_?EvenQ] := With[{
@@ -857,6 +859,58 @@ ListToCanonical[list_List, group_, free_] := Module[
 ];
 ListToCanonical[list_List, group_] := ListToCanonical[list, group, None];
 SyntaxInformation[ListToCanonical] = {"ArgumentsPattern" -> {_, _, _.}};
+
+WithxTensorDefault[fn_[obj_], def_] := def;
+WithxTensorDefault[fn_[obj_?xTensorQ], def_] := fn[obj];
+SetAttributes[WithxTensorDefault, HoldAll];
+
+SymmetricSGS[start_, len_] := StrongGenSet[{}, GenSet[]] /; len <= 1;
+SymmetricSGS[start_, len_] := StrongGenSet[Range[start, start + len - 1], GenSet @@ (xAct`xPerm`Cycles@{start, #} & /@ Range[start + 1, start + len - 1])] /; len > 1;
+
+DefDerivativeHolder[name_, params_, cds_] := With[{
+    plen = Length@params,
+    cdI = Length@params + 1,
+    cdlen = Length@cds,
+    tlen = Length@params + Length@cds,
+    vbs = VBundlesOfCovD /@ cds,
+    emptySGS = StrongGenSet[{}, GenSet[]]
+},
+    name /: xTensorQ[name[___]] = True;
+    With[{zeros = ConstantArray[0, plen + cdlen]},
+        name[tensor_] := name[tensor, zeros];
+    ];
+    name /: SymmetryGroupOfTensor[name[tensor_, ds_]] := Fold[
+        {#1[[1]] + #2, JoinSGS[#1[[2]], SymmetricSGS[#1[[1]] + 1, #2]]} &,
+        {Length@SlotsOfTensor@tensor, WithxTensorDefault[SymmetryGroupOfTensor@tensor, emptySGS]},
+        ds[[cdI ;; ]]
+    ][[2]];
+    With[{vbsi = -vbs},
+        name /: SlotsOfTensor[name[sym_, ds_]] := Prepend[Join @@ MapThread[ConstantArray, {vbsi, ds[[cdI ;; ]]}], WithxTensorDefault[SlotsOfTensor@sym, {}]];
+    ];
+    name /: DependenciesOfTensor[name[tensor_, ___]] := WithxTensorDefault[DependenciesOfTensor@tensor, {}];
+    name /: Dagger[name[tensor_, a___]] := name[WithxTensorDefault[Dagger@tensor, tensor], a];
+    name /: ParamD[pds__]@name[tensor_, ds_][inds___] := With[{
+        mpds = FirstPosition[params, #, Nothing, {1}] & /@ {pds}
+    },
+        (ParamD @@ Select[{pds}, !MemberQ[params, #] &])@name[tensor, MapAt[# + 1 &, ds, mpds]][inds] /; Length@mpds > 0
+    ];
+    name /: cd_?CovDQ[a_]@name[tensor_, ds_][inds___] := With[{
+        pos = FirstPosition[cds, cd, None, {1}][[1]]
+    },
+        name[tensor, MapAt[# + 1 &, ds, pos + plen]][inds, a] /; pos =!= None
+    ];
+    name /: MakeBoxes[e: name[tensor_, ds_List][inds___], StandardForm] := With[{
+        slots = Length@WithxTensorDefault[SlotsOfTensor@tensor, {}],
+        cdList = Join @@ MapThread[ConstantArray, {cds, ds[[cdI ;;]]}]
+    }, With[{
+        l = Join[
+            Join @@ MapThread[ConstantArray[SubscriptBox["\[PartialD]", PrintAs@#1], #2] &, {params, ds[[;; plen]]}],
+            MapThread[If[Head@# === Times, SubscriptBox[SymbolOfCovD[#2][[2]], PrintAs@Evaluate[-#1]], SuperscriptBox[SymbolOfCovD[#2][[2]], PrintAs@#1]] &, {{inds}[[slots + 1 ;;]], cdList}],
+            {MakeBoxes[#][[1, 1]]} &[tensor @@ ({inds}[[;; slots]])]
+        ]
+    }, InterpretationBox[StyleBox[RowBox@l, AutoSpacing -> False, ShowAutoStyles -> False], e, Editable -> False]]];
+];
+SyntaxInformation[DefDerivativeHolder] = {"ArgumentsPattern" -> {_, _, _}};
 
 End[];
 
