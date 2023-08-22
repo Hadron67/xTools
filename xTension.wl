@@ -93,13 +93,20 @@ ContractTensorWithMetric::usage = "ContractTensorWithMetric[expr, metric, filter
 ListToCanonical::usage = "ListToCanonical[list, group, gap] canonicalizes the list with the given symmetry group.";
 
 DefDerivativeHolder::usage = "DefDerivativeHolder[name, {param1, param2, ...}, {cd1, cd2, ...}] defines a derivative holder name[tensor, {param1, param2, ...}, {cd1, cd2, ...}].";
+DerivativeHolderQ::usage = "DerivativeHolderQ[holder] gives true for derivative holder.";
+DerivativeHolderData::usage = "DerivativeHolderData[holder] gives the data of the derivative holder.";
+DeepContractMetric::usage = "DeepContractMetric[expr, metrics] contracts all metrics in expr, including those in Scalar[].";
+DerivativeHolderToTensorDerivative::usage = "DerivativeHolderToTensorDerivative[expr, All | {holder1, ...}] converts derivative holders in expr into TensorDerivative.";
+
+LoadAll::usage = "LoadAll[] loads data from a predefined data file.";
+SaveAll::usage = "LoadAll[] dumps all symbols in Global` into a data file.";
+SavableObjQ::usage = "LoadAll[sym] gives true for symbols to be saved by SaveAll[].";
 
 $xToolsDebugFilter = {};
 $xToolsDebugFilter::usage = "$xDecompDebugFilter is a global variable, containing all enabled debug messages.";
 
 $xToolsDebugPrint = Print;
 $xToolsDebugPrint::usage = "$xDecompDebugPrint is a global hook variable for printing debug messages.";
-xToolsDebugPrint::usage = "xToolsDebugPrint[tag, msg] prints debug message with specified tag.";
 
 Begin["`Private`"];
 
@@ -461,23 +468,20 @@ UniqueIndex[-e_Symbol] := -UniqueIndex[e];
 (* ETensor *)
 ETensor::invldmlt = "Attempting to multiply two ETensors.";
 ETensor::icinds = "Incompatible indices `1` and `2`.";
+ETensor[l_List, inds_] := ETensor[#, inds] & /@ l;
 ETensor[expr_] := ETensor[expr, List @@ FindFreeIndices@expr];
-ETensor[expr_, {}] := Scalar[expr];
+ETensor[expr_, {}][] := PutScalar@expr;
 ETensor[expr_, inds_List][inds2__] /; Length@inds === Length@{inds2} := Module[
     {indPairs, matchedInds, unmatchedInds, unmatchedDummies, deltas},
     indPairs = Thread@{inds, {inds2}};
     matchedInds = Select[indPairs, SameIndexUDQ[#[[1]], #[[2]]] &];
     unmatchedInds = Append[#, UniqueIndex@#[[1]]] & /@ Select[indPairs, !SameIndexUDQ[#[[1]], #[[2]]] &];
     deltas = Times @@ (delta[ChangeIndex[#3], #2] & @@@ unmatchedInds);
-    ReplaceIndex[ReplaceDummies@expr, Join[#1 -> #3 & @@@ unmatchedInds, #1 -> #2 & @@@ matchedInds]] * deltas
+    ReplaceIndex[Evaluate@ReplaceDummies@expr, Join[#1 -> #3 & @@@ unmatchedInds, #1 -> #2 & @@@ matchedInds]] * deltas
 ];
-ETensor /:
-    ETensor[expr1_, inds1_List] + ETensor[expr2_, inds2_List] := (
-        ETensor[
-            ReplaceDummies[expr1]
-            + (ReplaceDummies[expr2] // ReplaceIndex[#, Thread[inds2 -> inds1]] &)
-        , inds1]
-    ) /; If[CompatibleIndexListsQ[inds1, inds2], True, Message[ETensor::icinds, inds1, inds2]; False];
+ETensor /: ETensor[expr1_, inds1_List] + ETensor[expr2_, inds2_List] := ETensor[
+    ReplaceDummies[expr1] + (ReplaceDummies[expr2] // ReplaceIndex[#, Thread[inds2 -> inds1]] &)
+, inds1] /; If[CompatibleIndexListsQ[inds1, inds2], True, Message[ETensor::icinds, inds1, inds2]; False];
 ETensor /: Times[ETensor[expr_, inds_], factors__] := (
     If[Cases[{factors}, _ETensor], Message[ETensor::invldmlt]];
     ETensor[Times[expr, factors], inds]
@@ -503,9 +507,12 @@ ETensor /: Times[ETensor[expr_, inds_], factors__] := (
     ChangeCovDNonChristoffel,
     SeparateMetricRiemann,
     CovDCommuToRiemann,
-    ContractTensorWithMetric
+    ContractTensorWithMetric,
+    xAct`xTras`SortCovDsToDiv[___]
 };
 ETensorBroadcastQ[_] = False;
+SyntaxInformation[ETensorBroadcastQ] = {"ArgumentsPattern" -> {_}};
+
 ETensor /: fn_?ETensorBroadcastQ[ETensor[expr_, inds_], args___] := ETensor[fn[expr, args], inds];
 ETensor /: FindFreeIndices[ETensor[_, inds_]] := IndexList @@ inds;
 ETensor /: ScreenDollarIndices[ETensor[expr_, inds_]] := Module[
@@ -561,7 +568,7 @@ ETensorContract[ETensor[expr_, inds_], nn_List] := With[{
     ]
 ]];
 ETensorContract[e_, {}] := e;
-SyntaxInformation[ETensorContract] = {"ArgumentsPattern" -> {_, _, _}};
+SyntaxInformation[ETensorContract] = {"ArgumentsPattern" -> {_, _}};
 
 ETensorRank[ETensor[_, inds_]] := Length@inds;
 ETensorRank[_] = 0;
@@ -852,12 +859,12 @@ ListToCanonical[list_List, group_, free_] := Module[
     {listSet, canonList, repeated, frees, perm},
     listSet = Union@list;
     canonList = Sort[list];
-    repeated = Transpose[Position[canonList, #, {1}]][[1]] & /@ If[free =!= None, Select[listSet, # < free &], listSet];
-    frees = If[free =!= None, Select[MapIndexed[{#1, #2[[1]]} &, canonList], #[[1]] >= free &][[All, 2]], {}];
+    repeated = Transpose[Position[canonList, #, {1}]][[1]] & /@ Complement[listSet, free];
+    frees = Intersection[canonList, free];
     perm = CanonicalPerm[Images@InversePermutation@Ordering@list, Length@list, group, frees, RepeatedSet /@ repeated];
     If[perm === 0, {0, list}, {If[Head[perm] === Times, -1, 1], PermuteList[canonList, InversePerm@perm]}]
 ];
-ListToCanonical[list_List, group_] := ListToCanonical[list, group, None];
+ListToCanonical[list_List, group_] := ListToCanonical[list, group, {}];
 SyntaxInformation[ListToCanonical] = {"ArgumentsPattern" -> {_, _, _.}};
 
 WithxTensorDefault[fn_[obj_], def_] := def;
@@ -865,29 +872,69 @@ WithxTensorDefault[fn_[obj_?xTensorQ], def_] := fn[obj];
 SetAttributes[WithxTensorDefault, HoldAll];
 
 SymmetricSGS[start_, len_] := StrongGenSet[{}, GenSet[]] /; len <= 1;
-SymmetricSGS[start_, len_] := StrongGenSet[Range[start, start + len - 1], GenSet @@ (xAct`xPerm`Cycles@{start, #} & /@ Range[start + 1, start + len - 1])] /; len > 1;
+SymmetricSGS[start_, len_] := StrongGenSet[Range[start, start + len - 1], GenSet @@ (xAct`xPerm`Cycles@{#, # + 1} & /@ Range[start, start + len - 2])] /; len > 1;
+
+pdToBox[];
+MakeDerivativeHolderBox[e: _[tensor_, ds_List][inds___], params_, cds_] := With[{
+    slots = Length@WithxTensorDefault[SlotsOfTensor@tensor, {}],
+    plen = Length@params,
+    cdList = Join @@ MapThread[ConstantArray, {cds, ds[[Length@params + 1 ;;]]}]
+}, With[{
+    l = Join[
+        (* Join @@ MapThread[ConstantArray[SubscriptBox["\[PartialD]", PrintAs@#1], #2] &, {params, ds[[;; plen]]}], *)
+        Replace@{
+            {p_, 0} -> Nothing,
+            {p_, 1} :> SubscriptBox["\[PartialD]", PrintAs@p],
+            {p_, n_} :> SubsuperscriptBox["\[PartialD]", PrintAs@p, ToString@n]
+        } /@ Thread@{params, ds[[;; plen]]},
+        MapThread[If[Head@# === Times, SubscriptBox[SymbolOfCovD[#2][[2]], PrintAs@Evaluate[-#1]], SuperscriptBox[SymbolOfCovD[#2][[2]], PrintAs@#1]] &, {{inds}[[slots + 1 ;;]], cdList}],
+        {MakeBoxes[#][[1, 1]]} &[tensor @@ ({inds}[[;; slots]])]
+    ]
+}, InterpretationBox[StyleBox[RowBox@l, AutoSpacing -> False, ShowAutoStyles -> False], e, Editable -> False]]];
+
+DerivativeHolderQ[_] = False;
+DerivativeHolderData[_] = {};
+
+DerivativeHolderToTensorDerivativeOne[expr_, ds_, {params_, cds_}] := TensorDerivative @@ Join[
+    {expr},
+    Join @@ MapThread[ConstantArray[ParamD@#1, #2] &, {params, ds[[ ;; Length@params ]]}],
+    Join @@ MapThread[ConstantArray, {cds, ds[[ Length@params + 1 ;; ]]}]
+];
+DerivativeHolderToTensorDerivative[expr_, filter_] := expr /. holder_?DerivativeHolderQ[tensor_, ds_] :> DerivativeHolderToTensorDerivativeOne[tensor, ds, DerivativeHolderData@holder] /; FilterExprList[filter, holder];
+DerivativeHolderToTensorDerivative[expr_] := DerivativeHolderToTensorDerivative[expr, All];
+SyntaxInformation[DerivativeHolderToTensorDerivative] = {"ArgumentsPattern" -> {_, _.}};
 
 DefDerivativeHolder[name_, params_, cds_] := With[{
     plen = Length@params,
     cdI = Length@params + 1,
     cdlen = Length@cds,
     tlen = Length@params + Length@cds,
-    vbs = VBundlesOfCovD /@ cds,
+    vbs = VBundlesOfCovD[#][[1]] & /@ cds,
     emptySGS = StrongGenSet[{}, GenSet[]]
 },
-    name /: xTensorQ[name[___]] = True;
+    name /: DerivativeHolderQ[name] = True;
+    name /: DerivativeHolderData[name] = {params, cds};
     With[{zeros = ConstantArray[0, plen + cdlen]},
         name[tensor_] := name[tensor, zeros];
     ];
+    name[0, _][___] = 0;
+    name[ETensor[expr_, inds1_], ds_][inds2___] := With[{
+        expr2 = ETensor[expr, inds1] @@ {inds2}[[ ;; Length@inds1]],
+        ops = Join[
+            Join @@ MapThread[ConstantArray[ParamD@#1, #2] &, {params, ds[[ ;; plen]]}],
+            MapThread[#1@#2 &, {Join @@ MapThread[ConstantArray, {cds, ds[[ cdI ;; ]]}], {inds2}[[ Length@inds1 + 1 ;; ]]}]
+        ]
+    }, Fold[#2@#1 &, expr2, ops]];
+    name /: HoldPattern@xTensorQ[name[___]] = True;
     name /: SymmetryGroupOfTensor[name[tensor_, ds_]] := Fold[
         {#1[[1]] + #2, JoinSGS[#1[[2]], SymmetricSGS[#1[[1]] + 1, #2]]} &,
         {Length@SlotsOfTensor@tensor, WithxTensorDefault[SymmetryGroupOfTensor@tensor, emptySGS]},
         ds[[cdI ;; ]]
     ][[2]];
     With[{vbsi = -vbs},
-        name /: SlotsOfTensor[name[sym_, ds_]] := Prepend[Join @@ MapThread[ConstantArray, {vbsi, ds[[cdI ;; ]]}], WithxTensorDefault[SlotsOfTensor@sym, {}]];
+        name /: SlotsOfTensor[name[sym_, ds_]] := Join[WithxTensorDefault[SlotsOfTensor@sym, {}], Join @@ MapThread[ConstantArray, {vbsi, ds[[cdI ;; ]]}]];
     ];
-    name /: DependenciesOfTensor[name[tensor_, ___]] := WithxTensorDefault[DependenciesOfTensor@tensor, {}];
+    name /: DependenciesOfTensor[name[tensor_, ___]] := Union[WithxTensorDefault[DependenciesOfTensor@tensor, {}], params];
     name /: Dagger[name[tensor_, a___]] := name[WithxTensorDefault[Dagger@tensor, tensor], a];
     name /: ParamD[pds__]@name[tensor_, ds_][inds___] := With[{
         mpds = FirstPosition[params, #, Nothing, {1}] & /@ {pds}
@@ -897,20 +944,42 @@ DefDerivativeHolder[name_, params_, cds_] := With[{
     name /: cd_?CovDQ[a_]@name[tensor_, ds_][inds___] := With[{
         pos = FirstPosition[cds, cd, None, {1}][[1]]
     },
-        name[tensor, MapAt[# + 1 &, ds, pos + plen]][inds, a] /; pos =!= None
+        name[tensor, MapAt[# + 1 &, ds, pos + plen]][inds, a] /; pos =!= None (* FIXME *)
     ];
-    name /: MakeBoxes[e: name[tensor_, ds_List][inds___], StandardForm] := With[{
-        slots = Length@WithxTensorDefault[SlotsOfTensor@tensor, {}],
-        cdList = Join @@ MapThread[ConstantArray, {cds, ds[[cdI ;;]]}]
-    }, With[{
-        l = Join[
-            Join @@ MapThread[ConstantArray[SubscriptBox["\[PartialD]", PrintAs@#1], #2] &, {params, ds[[;; plen]]}],
-            MapThread[If[Head@# === Times, SubscriptBox[SymbolOfCovD[#2][[2]], PrintAs@Evaluate[-#1]], SuperscriptBox[SymbolOfCovD[#2][[2]], PrintAs@#1]] &, {{inds}[[slots + 1 ;;]], cdList}],
-            {MakeBoxes[#][[1, 1]]} &[tensor @@ ({inds}[[;; slots]])]
-        ]
-    }, InterpretationBox[StyleBox[RowBox@l, AutoSpacing -> False, ShowAutoStyles -> False], e, Editable -> False]]];
+    name /: MakeBoxes[e: name[_, _List][___], StandardForm] := MakeDerivativeHolderBox[e, params, cds];
 ];
 SyntaxInformation[DefDerivativeHolder] = {"ArgumentsPattern" -> {_, _, _}};
+
+DeepContractMetric[expr_, metrics_] := ContractMetric[expr /. Scalar[e_] :> PutScalar@DeepContractMetric[e, metrics], metrics];
+DeepContractMetric[expr_] := ContractMetric[expr /. Scalar[e_] :> PutScalar@DeepContractMetric@e];
+SyntaxInformation[DeepContractMetric] = {"ArgumentsPattern" -> {_, _.}};
+
+LoadAll[] := (
+    SetDirectory[NotebookDirectory[]];
+    Get[FileBaseName[NotebookFileName[]] <> ".data.wl"];
+    ResetDirectory[];
+);
+SyntaxInformation[LoadAll] = {"ArgumentsPattern" -> {}};
+
+NonxTensorObjQ[c_Symbol] := And[And @@ (!MatchQ[#, HoldPattern[Verbatim[HoldPattern][DefInfo[c]] :> _]] & /@ UpValues[c]), ! AbstractIndexQ[c]];
+SavableObjQ[c_Symbol] := NonxTensorObjQ[c] && Length@Join[UpValues@c, DownValues@c, OwnValues@c] > 0;
+SavableObjQ[c_String] := SavableObjQ@Symbol@c;
+SavableObjQ[_] = True;
+SavableObjQ[SavableObjQ] = False;
+SavableObjQ[NonxTensorObjQ] ^= False;
+SaveAll[] := (
+    SetDirectory[NotebookDirectory[]];
+    With[{
+        fname = FileBaseName[NotebookFileName[]] <> ".data.wl"
+    },
+        DeleteFile[fname];
+        Save[fname, Evaluate@Select[Names["Global`*"], SavableObjQ], IncludedContexts -> {}];
+    ];
+    ResetDirectory[];
+);
+SavableObjQ[SaveAll] ^= False;
+SyntaxInformation[SaveAll] = {"ArgumentsPattern" -> {}};
+SyntaxInformation[SavableObjQ] = {"ArgumentsPattern" -> {_}};
 
 End[];
 

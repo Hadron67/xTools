@@ -1,4 +1,4 @@
-Needs["xTools`xDecomp`", "xDecomp.wl"];
+<< xTools`xDecomp`
 
 $DefInfoQ = False;
 
@@ -217,14 +217,14 @@ VerificationTest[
 ];
 
 VerificationTest[
-    0 == GCTensorCovDDiv[v1, 1, -decomp, chris][]
+    0 == GCTensorCovDDiv[v1, 1, CovDGChart[-decomp, chris]][]
     - PDGChart[-decomp][-Mf`A][v1[Mf`A]]
     - chris[Mf`B, -Mf`B, -Mf`A] v1[Mf`A]
     // ContractGCTensors[#, holder1] & // NoScalar // ToCanonical[#, UseMetricOnVBundle -> None] &
 ];
 
 VerificationTest[
-    GCTensorCovDDiv[t1, 1, -decomp, chris] - ETensor[ContractGCTensors[
+    GCTensorCovDDiv[t1, 1, CovDGChart[-decomp, chris]] - ETensor[ContractGCTensors[
         PDGChart[-decomp][-Mf`B][t1[Mf`B, -Mf`A]]
         + chris[Mf`B, -Mf`B, -Mf`C] t1[Mf`C, -Mf`A]
         - chris[Mf`C, -Mf`B, -Mf`A] t1[Mf`B, -Mf`C]
@@ -234,7 +234,7 @@ VerificationTest[
 ];
 
 VerificationTest[
-    GCTensorCovDGrad[t1, -decomp, chris] - ETensor[ContractGCTensors[
+    GCTensorCovDGrad[t1, CovDGChart[-decomp, chris]] - ETensor[ContractGCTensors[
         PDGChart[-decomp][-Mf`C][t1[Mf`A, -Mf`B]]
         + chris[Mf`A, -Mf`C, -Mf`D] t1[Mf`D, -Mf`B]
         - chris[Mf`D, -Mf`C, -Mf`B] t1[Mf`A, -Mf`D]
@@ -254,7 +254,7 @@ VerificationTest[
         ,
             {Mf`A, Mf`C, Mf`D}
         ],
-        term2 = GCTensorCovDDiv[p0, 2, -decomp, chris]
+        term2 = GCTensorCovDDiv[p0, 2, CovDGChart[-decomp, chris]]
     }, ToCanonical[term1 - term2, UseMetricOnVBundle -> None] // Simplify // ZeroGCTensorQ]
 ];
 
@@ -290,6 +290,20 @@ VerificationTest[
         t2 = 1 / Sqrt[detg] (-ParamD[t][Sqrt[detg] 1/h[r] ParamD[t]@phi0[]] + ParamD[r][Sqrt[detg] f[r] ParamD[r]@phi0[]])
     },
         Simplify[t1 - t2] == 0 && Simplify[t11 - t2] == 0
+    ]
+];
+
+MUnit`EndTestSection[];
+
+MUnit`BeginTestSection["TensorDerivative"];
+
+Print@ContractGCTensors[ToTensorDerivative@CDMf[-Mf`A]@CDMf[Mf`A]@phi0[], holder1];
+
+VerificationTest[
+    With[{
+        expr = CDMf[-Mf`A]@CDMf[Mf`A]@phi0[]
+    },
+        ContractGCTensors[ToTensorDerivative@expr, holder1] - ContractGCTensors[expr, holder1] == 0// NoScalar // ContractMetric // Simplification
     ]
 ];
 

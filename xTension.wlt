@@ -1,4 +1,4 @@
-Needs["xTools`xTension`", "xTension.wl"];
+<< xTools`xTension`
 $DefInfoQ = False;
 
 DefConstantSymbol[dimx];
