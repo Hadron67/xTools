@@ -6,3 +6,9 @@ VerificationTest[FVariation[2 f[x]g'[x]], 2 FVariation[f[x]] g'[x] + 2 f[x] FVar
 VerificationTest[FVariation[2 f[x]g'[x] g[x], 1, ConstantFunctions -> {g}], 2 FVariation[f[x], 1, ConstantFunctions -> {g}] g'[x] g[x]];
 
 MUnit`EndTestSection[];
+
+With[{
+    case = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}
+},
+    VerificationTest[SparseRowReduce@case, RowReduce@case];
+];
