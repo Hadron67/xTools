@@ -98,6 +98,8 @@ DerivativeHolderData::usage = "DerivativeHolderData[holder] gives the data of th
 DeepContractMetric::usage = "DeepContractMetric[expr, metrics] contracts all metrics in expr, including those in Scalar[].";
 DerivativeHolderToTensorDerivative::usage = "DerivativeHolderToTensorDerivative[expr, All | {holder1, ...}] converts derivative holders in expr into TensorDerivative.";
 
+TensorPolynomialToVec::usage = "TensorPolynomialToVec[expr, table] converts the tensor polynomial into a vector by looking up tensor factors in the given list.";
+
 LoadAll::usage = "LoadAll[] loads data from a predefined data file.";
 SaveAll::usage = "LoadAll[] dumps all symbols in Global` into a data file.";
 SavableObjQ::usage = "LoadAll[sym] gives true for symbols to be saved by SaveAll[].";
@@ -452,7 +454,7 @@ SyntaxInformation[DefMetricNsd] = {"ArgumentsPattern" -> {_, _, ___}};
 NoSignDet::nsd = "SignDetOfMetric[`1`] is not defined.";
 NoSignDet /: DefMetric[NoSignDet, metric_[inds___], args___] := (
     DefMetric[1, metric[inds], args];
-    SignDetOfMetric[metric] ^:= Throw@Message[NoSignDet::nsd, metric];
+    SignDetOfMetric[metric] ^= xAct`Invar`sigma;
 );
 
 SameIndexUDQ[a_Symbol, b_Symbol] = True;
@@ -874,7 +876,6 @@ SetAttributes[WithxTensorDefault, HoldAll];
 SymmetricSGS[start_, len_] := StrongGenSet[{}, GenSet[]] /; len <= 1;
 SymmetricSGS[start_, len_] := StrongGenSet[Range[start, start + len - 1], GenSet @@ (xAct`xPerm`Cycles@{#, # + 1} & /@ Range[start, start + len - 2])] /; len > 1;
 
-pdToBox[];
 MakeDerivativeHolderBox[e: _[tensor_, ds_List][inds___], params_, cds_] := With[{
     slots = Length@WithxTensorDefault[SlotsOfTensor@tensor, {}],
     plen = Length@params,
@@ -946,7 +947,13 @@ DefDerivativeHolder[name_, params_, cds_] := With[{
     },
         name[tensor, MapAt[# + 1 &, ds, pos + plen]][inds, a] /; pos =!= None (* FIXME *)
     ];
-    name /: MakeBoxes[e: name[_, _List][___], StandardForm] := MakeDerivativeHolderBox[e, params, cds];
+    name /: MakeBoxes[e: name[_, {___Integer}][___], StandardForm] := MakeDerivativeHolderBox[e, params, cds];
+    PrintAs[name[a_, b_]] ^:= With[{n = ToString@name}, MakeBoxes[n[a, b]]];
+    (* name /: MakeBoxes[e : name[tensor_, d_][a___], StandardForm] := With[{
+        b = MakeBoxes[#[tensor, d][a]] &@ToString@name
+    },
+        InterpretationBox[b, e, Editable -> False]
+    ]; *)
 ];
 SyntaxInformation[DefDerivativeHolder] = {"ArgumentsPattern" -> {_, _, _}};
 
@@ -980,6 +987,26 @@ SaveAll[] := (
 SavableObjQ[SaveAll] ^= False;
 SyntaxInformation[SaveAll] = {"ArgumentsPattern" -> {}};
 SyntaxInformation[SavableObjQ] = {"ArgumentsPattern" -> {_}};
+
+xTensorExprQ[_?xTensorQ[___]] = True;
+xTensorExprQ[_?CovDQ[_][_]] = True;
+xTensorExprQ[_Scalar] = True;
+xTensorExprQ[Power[_?xTensorExprQ, _]] = True;
+xTensorExprQ[_] = False;
+SplitTensorCoefficient[expr_] := SplitTensorCoefficient[expr, 1];
+SplitTensorCoefficient[t_?xTensorExprQ * expr_, f_] := SplitTensorCoefficient[expr, f*t];
+SplitTensorCoefficient[t_?xTensorExprQ, f_] := SplitTensorCoefficient[1, f*t];
+SplitTensorCoefficient[a_, b_] := {a, b};
+
+TensorPolynomialToVec::notfound = "Term `1` was not found in the list.";
+TensorPolynomialToVec[poly_Plus, table_] := TensorPolynomialToVec[#, table] & /@ poly;
+TensorPolynomialToVec[factor_, table_List] := With[{
+    ll = SplitTensorCoefficient[factor],
+    mat = IdentityMatrix@Length@table
+}, With[{
+    res = Cases[MapThread[If[ToCanonical[NoScalar[ll[[2]] - #1]] === 0, ll[[1]]*#2, 0] &, {table, mat}], _List, {1}]
+}, If[Length@res === 0, Message[TensorPolynomialToVec::notfound, factor]]; res[[1]]]];
+SyntaxInformation@TensorPolynomialToVec = {"ArgumentsPattern" -> {_, _}};
 
 End[];
 

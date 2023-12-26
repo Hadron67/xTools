@@ -6,6 +6,9 @@ FVariation::usage = "FVariation[expr, order] computes the functional variation."
 ConstantFunctions::usage = "ConstantFunctions is an option of FVariation that specifies constant functions.";
 ConstantxTensors::usage = "ConstantxTensors is an option of FVariation that specifies constant tensors from xAct.";
 
+DefPrintAs::usage = "DefPrintAs[name, string] makes name printed as the given string.";
+SparseRowReduceStep::usage = "";
+
 Begin["`Private`"];
 
 Options[FVariation] = {ConstantFunctions -> {}};
@@ -41,6 +44,40 @@ FVariation[Derivative[__][fn_Symbol][__], order_Integer /; order >= 1, opt: Opti
 FVariation[_Symbol, order_Integer /; order >= 1, ___] = 0;
 FVariation[_?NumberQ, order_Integer /; order >= 1, ___] = 0;
 SyntaxInformation[FVariation] = {"ArgumentsPattern" -> {_, _., OptionsPattern[]}};
+
+DefPrintAs[sym_, str_] := sym /: MakeBoxes[sym, StandardForm] := InterpretationBox[
+    StyleBox[RowBox@{str}, AutoSpacing -> False, ShowAutoStyles -> False],
+    sym,
+    Editable -> False
+];
+SyntaxInformation[DefPrintAs] = {"ArgumentsPattern" -> {_, _}};
+
+(* SparseRowReduce *)
+FirstNonZeroPosition[list_List] := FirstPosition[list, n_ /; n =!= 0, {None}, {1}, Heads -> False][[1]];
+FirstNonZeroPosition[arr_SparseArray] := With[{
+    pos = Sort[arr["ExplicitPositions"]]
+}, If[Length@pos === 0, None, pos[[1, 1]]]];
+
+NormalizeRow[list_] := list / list[[FirstNonZeroPosition[list]]];
+ResimplifyRow[list_List] := list;
+ResimplifyRow[list_SparseArray] := SparseArray@list;
+SubstractRowWithNormalizedRow[row_, normalizedRow_] := With[{
+    pos = FirstNonZeroPosition@normalizedRow
+}, With[{
+    coef = row[[pos]]
+}, If[coef =!= 0, ResimplifyRow@Simplify[row - normalizedRow * coef], row]]];
+
+SparseRowReduceStep[arr_List, row_] := With[{
+    newArr = With[{
+        chosenRow = row + Sort[FirstNonZeroPosition /@ arr[[row ;;]]][[1]] - 1
+    }, If[row === chosenRow,
+        ReplacePart[arr, {row -> NormalizeRow@arr[[row]]}],
+        ReplacePart[arr, {row -> NormalizeRow@arr[[chosenRow]], chosenRow -> arr[[row]]}]
+    ]]
+}, With[{
+    rowData = newArr[[row]]
+}, MapIndexed[If[#2[[1]] === row, rowData, SubstractRowWithNormalizedRow[#1, rowData]] &, newArr]]];
+SparseRowReduceStep[arr_SparseArray, row_] := SparseRowReduceStep[Extract[arr, Thread@{Range@Length@arr}], row];
 
 End[];
 

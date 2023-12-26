@@ -1102,6 +1102,7 @@ GCTensorContractPrimitive[TensorDerivative[tensor_, ders___][inds___], holder_, 
     SignOfAIndex /@ {inds},
     holder
 ][inds];
+GCTensorContractPrimitive[delta[a_, b_], holder_, opt: OptionsPattern[]] := DeltaGCTensor[holder][a, b];
 GCTensorContractPrimitive[t_?xTensorQ[inds___], holder_, opt: OptionsPattern[]] := GCTensorChangeIndices[t /. OptionValue[OtherReplaces], SignOfAIndex /@ {inds}, holder][inds] /; AnyTrue[OptionValue[OtherReplaces][[All, 1]], MatchQ[t, #] &];
 GCTensorContractPrimitive[t_?xTensorQ[inds___], holder_, opt: OptionsPattern[]] := CachedGCTensor[holder, t][inds] /; FilterReplaceGCTensor[t, holder, OptionValue[ReplaceHeldGCTensors]];
 GCTensorContractPrimitive[expr_, __] := expr;
