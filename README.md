@@ -1,10 +1,15 @@
 # xTools
+*The main part of this package is superseded by [Peanotica](https://github.com/Hadron67/Peanotica) and no longer maintained. Only the subpackage xTools\`Misc\` is active.*
+
 A Mathematica package for working with GR and AdS/CFT.
 
 Containing subpackages:
 
 ## xTension
 Including xAct related functions. Especially functions that makes it easier for working with metric decompositions.
+
+## xDecomp
+This package works similarly with xCoba, but more flexible.
 
 ## Some notes on xDecomp
 *xCoba* is excellent for component computation in xAct, but it cannot handle the case where the coordinate is partially defined, e.g., the spherically symmetric metric in $D$ dimension
