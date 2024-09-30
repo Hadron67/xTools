@@ -20,6 +20,13 @@ SeparateFactor::usage = "SeparateFactor[expr, fns]";
 GroupPolynomialBy::usage = "GroupPolynomialBy[expr, fn]";
 PolynomialToVec::usage = "PolynomialToVec[expr, fn, terms]";
 CollectBy::usage = "CollectBy[expr, fn, action]";
+AllTermsBy::usage = "AllTermsBy[expr, fn]";
+MakeRowSimplifier::usage = "MakeRowSimplifier[terms, mat]";
+ReduceBase::usage = "ReduceBase is an option for MakeRowSimplifierMat";
+MakeRowSimplifierMat::usage = "MakeRowSimplifierMat[mat]";
+PositionOfLastOne::usage = "PositionOfLastOne[mat]";
+RelationClosureTable::usage = "RelationClosureTable[initial, relationFn, collector]";
+MakeRowSimplifyRulesFromInitial::usage = "MakeRowSimplifyRulesFromInitial[initial, relationFn, collector]";
 
 SaveNotebookData::usage = "SaveNotebookData[names]";
 LoadNotebookData::usage = "LoadNotebookData[]";
@@ -105,7 +112,7 @@ SparseRowReduce[arr_List, row_Integer, opt : OptionsPattern[]] := With[{
         With[{
             newArr = If[row === chosenRow,
                 ReplacePart[arr, {row -> NormalizeRow[arr[[row]], rowMultiplier, rowNormalizer]}],
-                ReplacePart[arr, {row -> NormalizeRow[arr[[chosenRow, rowMultiplier, rowNormalizer]]], chosenRow -> arr[[row]]}]
+                ReplacePart[arr, {row -> NormalizeRow[arr[[chosenRow]], rowMultiplier, rowNormalizer], chosenRow -> arr[[row]]}]
             ]
         }, With[{
             rowData = newArr[[row]]
@@ -152,9 +159,15 @@ GroupPolynomialBy[expr_, fn_] := Association[Rule @@ SeparateFactor[expr, fn]];
 GroupPolynomialBy[fn_][expr_] := GroupPolynomialBy[expr, fn];
 SyntaxInformation@GroupPolynomialBy = {"ArgumentsPattern" -> {_, _.}};
 
+AllTermsBy[expr_List, fn_] := Union @@ (AllTermsBy[#, fn] & /@ expr);
+AllTermsBy[expr_, fn_] := DeleteCases[Keys@GroupPolynomialBy[expr, fn], 1];
+AllTermsBy[fn_][expr_] := AllTermsBy[expr, fn];
+SyntaxInformation@AllTermsBy = {"ArgumentsPattern" -> {_, _.}};
+
 TermsToVecTable[terms_] := Association@Thread[terms -> IdentityMatrix@Length@terms];
 
 PolynomialToVec[0, _, terms_] := ConstantArray[0, Length@terms];
+PolynomialToVec[expr_List, fn_, terms_] := PolynomialToVec[#, fn, terms] & /@ expr;
 PolynomialToVec[expr_, fn_, terms_] := GroupPolynomialBy[expr, fn] // KeyMap@TermsToVecTable@terms // KeyValueMap@Times // Total;
 SyntaxInformation@PolynomialToVec = {"ArgumentsPattern" -> {_, _, _}};
 
@@ -163,6 +176,67 @@ CollectBy[expr_, fn_, action_] := GroupPolynomialBy[Expand@expr, fn] // Map@acti
 CollectBy[fn_, action_][expr_] := CollectBy[expr, fn, action];
 CollectBy[fn_][expr_] := CollectBy[expr, fn, Identity];
 SyntaxInformation@CollectBy = {"ArgumentsPattern" -> {_, _., _.}};
+
+RelationClosureTableStep[relationFn_, collector_][{current_, newTerms_}] := With[{
+    newTermRels = AssociationMap[relationFn, newTerms]
+}, With[{
+    newCurrent = Join[current, newTermRels]
+}, {
+    newCurrent,
+    Complement[Union @@ (collector /@ Values@newTermRels), Keys@newCurrent]
+}]];
+RelationClosureTable[initial_, relationFn_, collector_] := First@NestWhile[RelationClosureTableStep[relationFn, collector], {<||>, initial}, Length@#[[2]] > 0 &];
+SyntaxInformation@RelationClosureTable = {"ArgumentsPattern" -> {_, _, _}};
+
+Options@MakeRowSimplifyRulesFromInitial = {
+    ProgressReporting -> None,
+    OrderedQ -> OrderedQ
+};
+MakeRowSimplifyRulesFromInitial[initial_, relationFn_, collector_, opt : OptionsPattern[]] := With[{
+    table = KeySort[RelationClosureTable[initial, relationFn, collector], OptionValue@OrderedQ]
+},
+    0
+];
+
+PositionOfLastOne[list_List] := With[{
+    pos = FirstPosition[Reverse@list, 1, Null, {1}]
+}, If[pos =!= Null, Length@list - pos[[1]] + 1, Null]];
+PositionOfLastOne[arr_SparseArray] := PositionOfLastOne@Normal@arr;
+SyntaxInformation@PositionOfLastOne = {"ArgumentsPattern" -> {_}};
+
+MakeRowSimplifier[terms_, mat_] := {
+    Delete[terms, Transpose@{DeleteCases[PositionOfLastOne /@ mat, Null]}]
+,
+    Association[With[{
+        pos = PositionOfLastOne@#
+    }, If[pos =!= Null,
+        terms[[pos]] -> -(ReplacePart[#, pos -> 0] . terms),
+        Nothing
+    ]] & /@ mat]
+};
+SyntaxInformation@MakeRowSimplifier = {"ArgumentsPattern" -> {_, _}};
+
+Options@MakeRowSimplifierMat = {
+    ReduceBase -> True
+};
+MakeRowSimplifierMat[mat_, opt : OptionsPattern[]] := With[{
+    rules = With[{
+        pos = PositionOfLastOne@#
+    }, If[pos =!= Null,
+        pos -> -ReplacePart[#, pos -> 0],
+        Nothing
+    ]] & /@ mat,
+    count = Length@mat[[1]]
+}, With[{
+    eliminatedPos = rules[[All, 1]]
+}, {
+    Delete[Range@count, Transpose@{eliminatedPos}],
+    With[{ret = ReplacePart[IdentityMatrix@count, rules]}, If[OptionValue@ReduceBase,
+        Delete[#, Transpose@{eliminatedPos}] & /@ ret,
+        ret
+    ]]
+}]];
+SyntaxInformation@MakeRowSimplifierMat = {"ArgumentsPattern" -> {_, OptionsPattern[]}};
 
 ToStringInputForm[expr_String] := expr;
 ToStringInputForm[expr_] := ToString@Unevaluated@InputForm@expr;
@@ -204,7 +278,7 @@ SavableObjQ[_] = True;
 SetAttributes[SavableObjQ, HoldAll];
 SyntaxInformation@SavableObjQ = {"ArgumentsPattern" -> {_}};
 
-SaveNotebookData[] := SaveNotebookData@Select[Names["Global`*"], SavableObjQ];
+SaveNotebookData[] := SaveNotebookData@Select[Names[$Context <> "*"], SavableObjQ];
 SaveNotebookData[names_] := (
     SetDirectory[NotebookDirectory[]];
     With[{
